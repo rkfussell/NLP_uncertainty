@@ -9,6 +9,7 @@ import re
 import random
 import test_bank
 import warnings
+import math
 
 from sklearn import model_selection, naive_bayes, svm, linear_model, ensemble, neighbors
 from sklearn.metrics import accuracy_score
@@ -46,7 +47,8 @@ def logreg1(s,tokenizer, Xtrain, Xtest, Train_y, Test_y):
     Log.fit(Xtrain,Train_y)
     # predict the labels on validation dataset
     predictions_Log = Log.predict(Xtest)
-    if s==0:
+    #if s==0:
+    if False:
         #Log.coef_[2][i] for principles, Log.coef_[0][i] for limitations
         coefs_dict = {i: Log.coef_[0][i] for i in range(len(Log.coef_[0]))}
         sorted_dict = {}
@@ -82,14 +84,17 @@ def get_stats_est_fp_fn_trust(train_x, train_y, test_x, test_y, trials = 100):
         while not enough_pos_in_test:
             set_random_seed(seed = s + n*100)
             _, Te_X, _, Te_y = model_selection.train_test_split(test_x,test_y,test_size=100)
-            Te_X = tok.texts_to_matrix(Te_X, mode="binary")
-            mat = logreg1(s,tok, Tr_X, Te_X, train_y, Te_y)
             if sum(Te_y)<2:
                 n +=1
                 print(n)
             else:
                 enough_pos_in_test = True
+                
+            if n > 21:
+                return pd.DataFrame(), pd.DataFrame()
 
+        Te_X = tok.texts_to_matrix(Te_X, mode="binary")
+        mat = logreg1(s,tok, Tr_X, Te_X, train_y, Te_y)
         
         est.append(mat[1][1] + mat[0][1])
         human_est.append(pd.DataFrame(Te_y).value_counts(sort = False)[1])
@@ -117,11 +122,40 @@ def get_stats_est_fp_fn_trust(train_x, train_y, test_x, test_y, trials = 100):
     return df, df_human
 
 
-def get_data_trust(s = 1, code = "Expected", train_rep = "equal"):
+def get_data_trust(train_dec, test_dec, s = 1, code = "Expected", ):
+    """
+    
+    code is a string, the category of response in human coded data
+    N_each is the number of responses after cleaning 
+
+    Parameters
+    ----------
+    s : integer, optional
+        s is an integer specifying random seed. The default is 1.
+    code : string
+        the category of response in human coded data.
+    N_each : integer, optional
+        N_each is the max number of responses from either type (PRE or POST) after cleaning. 
+    train_perc : float
+        Number between 0 and 1 specifying fraction of PRE to put in training set.
+    test_perc : float
+        Number between 0 and 1 specifying fraction of PRE to put in test set.
+
+    Returns
+    -------
+    df : TYPE
+        DESCRIPTION.
+    df_human : TYPE
+        DESCRIPTION.
+    df_PRE : TYPE
+        DESCRIPTION.
+    df_human_PRE : TYPE
+        DESCRIPTION.
+
+    """
     #read in the data
     df = pd.read_excel (r'Trustworthy_Master_Spreadsheet_Summer_2022.xlsx')
     df["Trustworthy Response"] = df["Trustworthy Response"].str.replace(".","")
-    print(df)
     df = df[df["Trustworthy Response"].notnull()]
     df = df[df["Trustworthy Response"].str.len()>1]
     #remove duplicates from master spreadsheet
@@ -132,15 +166,17 @@ def get_data_trust(s = 1, code = "Expected", train_rep = "equal"):
     POST = df[df["PRE/POST"] == "POST"]
     PRE = df[df["PRE/POST"] == "PRE"]
     
-    
     set_random_seed(seed = s)
     POST = POST.sample(frac=1).reset_index(drop=True)
     PRE = PRE.sample(frac=1).reset_index(drop=True)
     print(len(PRE))
     print(len(POST))
-    #keep 820 from both PRE and POST because there are only 820 in PRE (same every time, fixed at seed 132)
-    PRE = PRE[:820]
-    POST = POST[:820]
+    N_each = len(PRE) if len(PRE) < len(POST) else len(POST)
+    assert(N_each > 800)
+    
+    #keep N_each from both PRE and POST because there are only N_each in PRE (same every time, fixed at seed 132)
+    PRE = PRE[:N_each]
+    POST = POST[:N_each]
     
     #shuffle PRE and POST data frames according to current seed
     #set_random_seed(seed = s)
@@ -156,42 +192,104 @@ def get_data_trust(s = 1, code = "Expected", train_rep = "equal"):
         X_POST.append(preprocess_text(response))
     y_POST = np.array(POST[code].tolist())
     
+    #cook percentage of code in training set
+    overall_frequency = sum(y_PRE + y_POST)
     
-    #decide what to do next based on train_rep specified by user
-    if train_rep == "equal":
-        #CREATE EQUAL REP TRAINING SET
-        enough_pos_train = False
-        Train_X = X_PRE[:400] + X_POST[:400]
-        Train_y = np.concatenate((y_PRE[:400],y_POST[:400]))
-        #create a test set that is sampled later
-        full_test_X = X_PRE[400:500] + X_POST[400:500]
-        full_test_y = np.concatenate((y_PRE[400:500], y_POST[400:500]))
-        full_test_X_PRE = X_PRE[500:700]
-        full_test_y_PRE = y_PRE[500:700]
-    elif train_rep == "over":
-        #CREATE OVER-REP PRE TRAINING SET
-        Train_X = X_PRE[:600] + X_POST[:200]
-        Train_y = np.concatenate((y_PRE[:600],y_POST[:200]))
-        #create a test set that is sampled later
-        full_test_X = X_PRE[600:700] + X_POST[200:300]
-        full_test_y = np.concatenate((y_PRE[600:700],y_POST[200:300]))
-        full_test_X_PRE = X_PRE[600:800]
-        full_test_y_PRE = y_PRE[600:800]
-    elif train_rep == "under":
-        Train_X = X_PRE[:200] + X_POST[:600]
-        Train_y = np.concatenate((y_PRE[:200],y_POST[:600]))
-        #create a test set that is sampled later
-        full_test_X = X_PRE[200:300] + X_POST[600:700]
-        full_test_y = np.concatenate((y_PRE[200:300],y_POST[600:700]))
-        full_test_X_PRE = X_PRE[600:800]
-        full_test_y_PRE = y_PRE[600:800]
+    #number of pos and neg in test and training sets
+    N_pos_test = math.floor(200*test_dec)
+    N_neg_test = 200 - N_pos_test
+    N_pos_train = math.floor(800*train_dec)
+    N_neg_train = 800 - N_pos_train
+    
+    print("N_pos_test " + str(N_pos_test))
+    print("N_neg_test " + str(N_neg_test))
+    print("N_pos_train " + str(N_pos_train))
+    print("N_neg_train " + str(N_neg_train))
+    
+    
+    X_PRE_pos = []
+    X_PRE_neg = []
+    X_POST_pos = []
+    X_POST_neg = []
+    y_PRE_pos = []
+    y_PRE_neg = []
+    y_POST_pos = []
+    y_POST_neg = []
+    
+    for idx, condition_met in enumerate(y_PRE == 1):
+        if condition_met:
+            X_PRE_pos.append(X_PRE[idx])
+            y_PRE_pos.append(y_PRE[idx])
+        elif not condition_met:
+            X_PRE_neg.append(X_PRE[idx])
+            y_PRE_neg.append(y_PRE[idx])
+    for idx, condition_met in enumerate(y_POST == 1):
+        if condition_met:
+            X_POST_pos.append(X_POST[idx])
+            y_POST_pos.append(y_POST[idx])
+        elif not condition_met:
+            X_POST_neg.append(X_POST[idx])
+            y_POST_neg.append(y_POST[idx])
+    
+    assert(sum(y_PRE_pos)/len(y_PRE_pos) == 1.0)
+    assert(sum(y_PRE_neg)/len(y_PRE_neg) == 0.0)
+    assert(sum(y_POST_pos)/len(y_POST_pos) == 1.0)
+    assert(sum(y_POST_neg)/len(y_POST_neg) == 0.0)
+    
+    X_pos = X_PRE_pos + X_POST_pos
+    X_neg = X_PRE_neg + X_POST_neg
+    random.shuffle(X_pos)
+    random.shuffle(X_neg)
+    
+    if len(X_pos) < N_pos_train + N_pos_test or len(X_neg) < N_neg_train + N_neg_test:
+        return pd.DataFrame()
+    
+    y_pos = y_PRE_pos + y_POST_pos
+    y_neg = y_PRE_neg + y_POST_neg
+    print("length X_pos " + str(len(X_pos)))
+    print("length X_neg " + str(len(X_neg)))
+    #create X and y for fixed training set
+    Train_X = X_pos[:N_pos_train] + X_neg[:N_neg_train]
+    Train_y = np.concatenate((y_pos[:N_pos_train],y_neg[:N_neg_train]))
+    
+    #create a test set that is sampled later
+    full_test_X = X_pos[N_pos_train:N_pos_train + N_pos_test] + X_neg[N_neg_train: N_neg_train + N_neg_test]
+    full_test_y = np.concatenate((y_pos[N_pos_train:N_pos_train + N_pos_test], y_neg[N_neg_train: N_neg_train + N_neg_test]))
+    
+    
+    print("train X " + str(len(Train_X)))
+    print("train y " + str(len(Train_y)))
+    print("test X " + str(len(full_test_X)))
+    print("test y " + str(len(full_test_y)))
+    
+    if len(full_test_y) <= 150:
+        return pd.DataFrame()
+    """
+    #create train set size based on input params for percent PRE
+    N_PRE_train = math.floor((N_each-200)*train_dec)
+    N_POST_train = N_each - 200 - N_PRE_train
+    
+    #create X and y for fixed training set
+    Train_X = X_PRE[:N_PRE_train] + X_POST[:N_POST_train]
+    Train_y = np.concatenate((y_PRE[:N_PRE_train],y_POST[:N_POST_train]))
+    
+    #create test set size based on input params
+    N_PRE_test = math.floor(200*test_dec)
+    print(N_PRE_test)
+    N_POST_test = 200 - N_PRE_test
+    print(N_POST_test)
+    #create a test set that is sampled later
+    full_test_X = X_PRE[N_PRE_train:N_PRE_train + N_PRE_test] + X_POST[N_POST_train: N_POST_train + N_POST_test]
+    full_test_y = np.concatenate((y_PRE[N_PRE_train:N_PRE_train + N_PRE_test], y_POST[N_POST_train: N_POST_train + N_POST_test])) 
+    """
+    
     #Run logreg on 100 test set samples (equal test set)
     df, df_human = get_stats_est_fp_fn_trust(Train_X, Train_y, full_test_X, full_test_y)
-    #Run logreg on 100 test set samples (PRE-only test set)
-    df_PRE, df_human_PRE = get_stats_est_fp_fn_trust(Train_X, Train_y, full_test_X_PRE, full_test_y_PRE)
+    if df.empty:
+        return pd.DataFrame()
     if sum(Train_y)<2:
         warnings.warn("Less than 2 examples of code in Training set")
-    test_bank.tests_on_inputs(PRE, POST, Train_X, Train_y, full_test_X, full_test_y, full_test_X_PRE, full_test_y_PRE, opt_trustworthy = True)
+    test_bank.tests_on_inputs(PRE, POST, Train_X, Train_y, full_test_X, full_test_y, N_each, opt_trustworthy = False)
     #might be able to not output the human dfs because of the tests, write down where that info can be gathered elsewhere
-    test_bank.tests_on_outputs(df["est"], df["human_est"],df["fp"], df["fn"])
-    return df, df_human, df_PRE, df_human_PRE
+    test_bank.tests_on_outputs(df["est"], df["human_est"],df["fp"], df["fn"], df_human)
+    return df
