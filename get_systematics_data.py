@@ -19,29 +19,106 @@ from sklearn.metrics import confusion_matrix
 from keras.preprocessing.text import Tokenizer
 
 def set_random_seed(seed=0):
-  np.random.seed(seed)
-  random.seed(seed)
-def preprocess_text(para):
-    para = para.lower()
-    # Remove punctuations and numbers
-    para = re.sub('[^a-zA-Z]', ' ', para)
-    # Single character removal
-    para = re.sub(r"\s+[a-zA-Z]\s+", ' ', para)
-    # Removing multiple spaces
-    para = re.sub(r'\s+', ' ', para)
+    """
+    Sets seed in numpy and random
+
+    Parameters
+    ----------
+    seed : int
+         Seed number for current random instance.
+
+    Returns
+    -------
+    None.
+
+    """
+    np.random.seed(seed)
+    random.seed(seed)
+def preprocess_text(line):
+    """
+    Preprocess responses, split into tokens. 
     
-    tokens = para.split()
+    Make all characters lowercase, remove punctuation and numbers, remove single characters, remove multiple spaces,
+    ensure all words are alphabetic
+
+    Parameters
+    ----------
+    line : string
+        DESCRIPTION.
+
+    Returns
+    -------
+    tokens : list
+        clearned, tokenized list of words
+
+    """
+    line = line.lower()
+    # Remove punctuations and numbers
+    line = re.sub('[^a-zA-Z]', ' ', line)
+    # Single character removal
+    line = re.sub(r"\s+[a-zA-Z]\s+", ' ', line)
+    # Removing multiple spaces
+    line = re.sub(r'\s+', ' ', line)
+    
+    tokens = line.split()
     # remove remaining tokens that are not alphabetic
     tokens = [word for word in tokens if word.isalpha()]
     
     return tokens
 
 def cohens_kappa(tp,fp,fn,tn):
+    """
+    Calculate Cohen's kappa
+
+    Parameters
+    ----------
+    tp : int
+        True Positive
+    fp : int
+        False Positive
+    fn : int
+        False Negative
+    tn : int
+        True Negative
+
+    Returns
+    -------
+    float
+        Cohen's kappa, between 0 and 1
+
+    """
+    #assert(isinstance(tp,int))
+    #assert(isinstance(fp,int))
+    #assert(isinstance(fn,int))
+    #assert(isinstance(tn,int))
     num = 2*(tp*tn - fn*fp)
     denom = (tp+fp)*(fp+tn) + (tp+fn)*(fn+tn)
     return num/denom
 
 def logreg1(s,tokenizer, Xtrain, Xtest, Train_y, Test_y):
+    """
+    Run logistic regression machine learning algorithm 
+    Parameters
+    ----------
+    s : integer
+        s is an integer specifying random seed.
+    tokenizer : Tokenizer object
+        Stores words in vocabulary wotj relevant index (necessary for viewing log reg coefficients)
+    Xtrain : numpy array
+        X (encoded responses) of training set
+    Xtest : numpy array
+         X (encoded responses) of test set
+    Train_y : numpy array
+        y (classification) of training set
+    Test_y : TYPE
+        y (encoded responses) of test set
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    """
     set_random_seed(seed = s)
     Log = linear_model.LogisticRegression(random_state = s, max_iter = 10000)
     Log.fit(Xtrain,Train_y)
@@ -66,6 +143,33 @@ def logreg1(s,tokenizer, Xtrain, Xtest, Train_y, Test_y):
     return confusion_matrix(Test_y, predictions_Log)
 
 def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, trials = 100):
+    """
+    Run the logistic regression for many trials, store and return all relevant data (e.g. computer est, human est, rate of false negatives and rate of false positives)
+    
+    For binary classification tasks. 
+    
+    Parameters
+    ----------
+    train_x : numpy array
+        X (encoded responses) of training set, all training data used in all trials
+    train_y : numpy array
+        y (classification) of training set, all training data used in all trials
+    test_x : numpy array
+        X (encoded responses) of test set, random samples of 100 pulled from here in all trials
+    test_y : numpy array
+        X (encoded responses) of test set, random samples of 100 pulled from here in all trials
+    trials : int, optional
+        Number of random samples to pull from the test sets to get multiple trials from the training set. The default is 100.
+
+
+    Returns
+    -------
+    df: pandas_dataframe 
+        Dataframe of all trials (default 100) for given parameters. 
+    df_human: pandas dataframe
+        Value counts for each code, for testing purposes
+
+    """
     est = []
     fp = []
     fn = []
@@ -117,6 +221,32 @@ def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, trials = 100):
     return df, df_human
 
 def get_stats_est_fp_fn_3code(train_x, train_y, test_x, test_y, val, trials = 100):
+    """
+    Run the logistic regression for many trials, store and return all relevant data (e.g. computer est, human est, rate of false negatives and rate of false positives)
+    
+    When classification task has 3 possible results. 
+    
+    Parameters
+    ----------
+    train_x : numpy array
+        X (encoded responses) of training set, all training data used in all trials
+    train_y : numpy array
+        y (classification) of training set, all training data used in all trials
+    test_x : numpy array
+        X (encoded responses) of test set, random samples of 100 pulled from here in all trials
+    test_y : numpy array
+        X (encoded responses) of test set, random samples of 100 pulled from here in all trials
+    trials : int, optional
+        Number of random samples to pull from the test sets to get multiple trials from the training set. The default is 100.
+
+    Returns
+    -------
+    df: pandas_dataframe 
+        Dataframe of all trials (default 100) for given parameters. 
+    df_human: pandas dataframe
+        Value counts for each code, for testing purposes
+
+    """
     est = []
     fp = []
     fn = []
@@ -179,15 +309,29 @@ def get_stats_est_fp_fn_3code(train_x, train_y, test_x, test_y, val, trials = 10
     
     return df, df_human
 def trustworthy_process( s, code):
+    """
+    Pre-process trustworthy data, break into data subsets PRE and POST
+
+    Parameters
+    ----------
+    s : integer
+        s is an integer specifying random seed.
+    code : string
+        the category of response in human coded data.
+
+    Returns
+    -------
+    tuple of full data frame for each data subset (subsets defined by systematic variable of interest), tuple
+        DESCRIPTION.
+    N_each, int
+        Description
+    tuple of X for each data subset
+        Description
+    tuple of y for each data subset
+        Description
+    """
     #read in the data
-    df = pd.read_excel (r'Trustworthy_Master_Spreadsheet_Summer_2022.xlsx')
-    df["Trustworthy Response"] = df["Trustworthy Response"].str.replace(".","")
-    df = df[df["Trustworthy Response"].notnull()]
-    df = df[df["Trustworthy Response"].str.len()>1]
-    #remove duplicates from master spreadsheet
-    df = df[~df.duplicated(subset = "Trustworthy Response", keep = "first")]
-    df = df[df["ResponseID"]!=124]
-    df = df[df["ResponseID"]!=308]
+    df = pd.read_csv(r'trustworthy_dat.csv')
     #create equal sized, shuffled pre and post data frames. these are fixed and do not depend on seed.
     POST = df[df["PRE/POST"] == "POST"]
     PRE = df[df["PRE/POST"] == "PRE"]
@@ -221,6 +365,29 @@ def trustworthy_process( s, code):
     return (POST, PRE), N_each, (X_PRE, X_POST), (y_PRE, y_POST)
 
 def sources_process( s, code ):
+    """
+    Pre-process sources of uncertainty data, break into groups of systematic variable.
+    
+    Data subsets as subsets defined by systematic variable of interest (exp): PM, BM, SG, SS. 
+
+    Parameters
+    ----------
+    s : integer
+        s is an integer specifying random seed.
+    code : string
+        the category of response in human coded data.
+
+    Returns
+    -------
+    tuple of full data frame for each data subset (subsets defined by systematic variable of interest), tuple
+        DESCRIPTION.
+    N_each, int
+        Description
+    tuple of X for each data subset
+        Description
+    tuple of y for each data subset
+        Description
+    """
     #read in the data
     df = pd.read_csv(r'PLO_dat.csv')
     df = df[df["Q"].notnull()]
@@ -278,7 +445,7 @@ def sources_process( s, code ):
     
     return (PMs, BMs, SGs, SSs), N_each, (X_PMs, X_BMs, X_SGs, X_SSs), (y_PMs, y_BMs, y_SGs, y_SSs)
 
-def get_data(train_dec, test_dec, code, val, s = 1, opt_trustworthy = False):
+def get_data(train_dec, test_dec, code, val, s, opt_trustworthy = False):
     """
     
     code is a string, the category of response in human coded data
@@ -286,27 +453,26 @@ def get_data(train_dec, test_dec, code, val, s = 1, opt_trustworthy = False):
 
     Parameters
     ----------
-    s : integer, optional
-        s is an integer specifying random seed. The default is 1.
+    train_dec : float
+        Number between 0 and 1 specifying fraction of PRE to put in training set.
+    test_dec : float
+        Number between 0 and 1 specifying fraction of PRE to put in test set.
     code : string
         the category of response in human coded data.
-    N_each : integer, optional
-        N_each is the max number of responses from either type (PRE or POST) after cleaning. 
-    train_perc : float
-        Number between 0 and 1 specifying fraction of PRE to put in training set.
-    test_perc : float
-        Number between 0 and 1 specifying fraction of PRE to put in test set.
+    val : string or int
+        estimate frequency in dataset of this value of code (e.g. "L" or 1 for binary data (trustworthy))
+    s : integer
+        s is an integer specifying random seed.
+    opt_trustworthy : bool
+        True if working with Trustworthy data only
+    
 
     Returns
     -------
-    df : TYPE
-        DESCRIPTION.
-    df_human : TYPE
-        DESCRIPTION.
-    df_PRE : TYPE
-        DESCRIPTION.
-    df_human_PRE : TYPE
-        DESCRIPTION.
+    df : Pandas dataframe
+        Dataframe of all trials (default 100) for given parameters. 
+        
+        All data at this stage has been run through the test_bank. 
 
     """
     
@@ -316,7 +482,7 @@ def get_data(train_dec, test_dec, code, val, s = 1, opt_trustworthy = False):
         train_size = 600
     else:
         df_s, N_each, X_s, y_s = sources_process(s, code)
-        full_test_max = 140 
+        full_test_max = 150 
         train_size = 600
     
     #number of pos and neg in test and training sets

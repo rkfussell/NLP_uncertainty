@@ -4,7 +4,7 @@
 @author: -
 """
 import pandas as pd
-
+import pull_data_code_seed as pull_data
 
 def tests_on_inputs(df_s, Train_X, Train_y, full_test_X, full_test_y, N_each, val, opt_trustworthy):
     #TEST 1: Train x and train y are same length, test x and test y are same length 
@@ -46,3 +46,12 @@ def tests_on_outputs(est, human_est,FP, FN, df_human):
     
     #TEST 3: human est out of 200 from df human is close to average of human_est in samples of 100
     assert(df_human["test_y"][1]/2 - human_est.mean() < 2 or df_human["test_y"][1]/2 - human_est.mean() > 2)
+    
+def tests_on_data():
+    #TEST 5: trials with same random seed are deterministically identical
+    df1 = pull_data.get_data_code_seed("Expected", 1, 101, opt_trustworthy = True)
+    df2 = pull_data.get_data_code_seed("Expected", 1, 101, opt_trustworthy = True)
+    assert(df1.equals(df2))
+    df1 = pull_data.get_data_code_seed("PLO", "L", 101, opt_trustworthy = False)
+    df2 = pull_data.get_data_code_seed("PLO", "L", 101, opt_trustworthy = False)
+    assert(df1.equals(df2))
