@@ -31,7 +31,7 @@ def tests_on_inputs(df_s, Train_X, Train_y, full_test_X, full_test_y, N_each, va
     assert(sum(1 for i in full_test_y if i == val)>1)
     
     
-def tests_on_outputs(est, human_est,FP, FN, df_human):
+def tests_on_outputs(est, human_est,FP, FN, df_human, test_dec, train_dec, full_test_max):
     #TEST 1: Assert Human estimate = TP + FN; est is within shooting distance of human est. 
     for i, row in est.iteritems():
         assert(human_est[i] == FN[i] + est[i] - FP[i])
@@ -46,6 +46,8 @@ def tests_on_outputs(est, human_est,FP, FN, df_human):
     
     #TEST 3: human est out of 200 from df human is close to average of human_est in samples of 100
     assert(df_human["test_y"][1]/2 - human_est.mean() < 2 or df_human["test_y"][1]/2 - human_est.mean() > 2)
+    #TEST 4: human est is at right level given test_dec
+    assert(100*test_dec - sum(human_est)/len(human_est) <3 or sum(human_est)/len(human_est) - 100*test_dec <3)
     
 def tests_on_data():
     #TEST 5: trials with same random seed are deterministically identical

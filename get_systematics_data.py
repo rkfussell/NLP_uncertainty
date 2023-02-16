@@ -11,6 +11,10 @@ import test_bank
 import warnings
 import math
 
+import contractions
+import nltk
+
+
 from sklearn import model_selection, naive_bayes, svm, linear_model, ensemble, neighbors
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import precision_score
@@ -40,11 +44,13 @@ def preprocess_text(line):
     
     Make all characters lowercase, remove punctuation and numbers, remove single characters, remove multiple spaces,
     ensure all words are alphabetic
+    
+    Pre-processing help from: https://www.kaggle.com/code/frankmollard/nlp-a-gentle-introduction-lstm-word2vec-bert
 
     Parameters
     ----------
     line : string
-        DESCRIPTION.
+        unprocessed chunk of text (single response)
 
     Returns
     -------
@@ -52,17 +58,25 @@ def preprocess_text(line):
         clearned, tokenized list of words
 
     """
-    line = line.lower()
-    # Remove punctuations and numbers
-    line = re.sub('[^a-zA-Z]', ' ', line)
-    # Single character removal
-    line = re.sub(r"\s+[a-zA-Z]\s+", ' ', line)
-    # Removing multiple spaces
-    line = re.sub(r'\s+', ' ', line)
+    token = nltk.tokenize.RegexpTokenizer(r"\w+")
+    stopWords = nltk.corpus.stopwords.words("english")
+    lemmatizer = nltk.stem.WordNetLemmatizer()
     
-    tokens = line.split()
+    line = line.lower().split(" ")
+    #fix contractions e.g. you're becomes you are
+    line = [contractions.fix(word) for word in line]
+    line=" ".join(line).lower()
+    line = token.tokenize(line)
+    #lemmatize
+    line = [lemmatizer.lemmatize(word) for word in line]
+    # remove whitespace
+    line = [word.strip() for word in line]
+    # Remove punctuations and numbers
+    line = [re.sub('[^a-zA-Z]', ' ', word) for word in line]
+    # Single character removal
+    line = [re.sub(r"\s+[a-zA-Z]\s+", ' ', word) for word in line]
     # remove remaining tokens that are not alphabetic
-    tokens = [word for word in tokens if word.isalpha()]
+    tokens = [word for word in line if word.isalpha()]
     
     return tokens
 
@@ -115,8 +129,8 @@ def logreg1(s,tokenizer, Xtrain, Xtest, Train_y, Test_y):
 
     Returns
     -------
-    TYPE
-        DESCRIPTION.
+    Confusion matrix: numpy array
+        output of logistic regression showing all predicted outcomes vs. human coded outcomes
 
     """
     set_random_seed(seed = s)
@@ -198,15 +212,16 @@ def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, trials = 100):
                 return pd.DataFrame(), pd.DataFrame()
 
         Te_X = tok.texts_to_matrix(Te_X, mode="binary")
+        #run the logistic regression, store confusion matrix as mat
         mat = logreg1(s,tok, Tr_X, Te_X, train_y, Te_y)
-        
+        #extract useful measures from mat
         est.append(mat[1][1] + mat[0][1])
         human_est.append(pd.DataFrame(Te_y).value_counts(sort = False)[1])
         fp.append(mat[0][1])
         fn.append(mat[1][0])
         kappa.append(cohens_kappa(mat[1][1], mat[1][0], mat[0][1], mat[0][0]))
         
-
+    #add all data to dataframes and return
     df = pd.DataFrame({
         "est" : est,
         "fp" : fp,
@@ -278,19 +293,19 @@ def get_stats_est_fp_fn_3code(train_x, train_y, test_x, test_y, val, trials = 10
         Te_X = tok.texts_to_matrix(Te_X, mode="binary")
         mat= logreg1(s,tok, Tr_X, Te_X, train_y, Te_y)
         #list of 3 codes in alphabetical order
-        if val == val[0]:
+        if val == vals[0]:
             est.append(mat[0][0] + mat[1][0] + mat[2][0])
             human_est.append(pd.DataFrame(Te_y).value_counts(sort = False)[0])
             fp.append(mat[1][0] + mat[2][0])
             fn.append(mat[0][1] + mat[0][2])
             kappa.append(cohens_kappa(mat[0][0], fp[-1], fn[-1], mat[1][1]+ mat[2][2]))
-        elif val == val[1]:
+        elif val == vals[1]:
             est.append(mat[0][1] + mat[1][1] + mat[2][1])
             human_est.append(pd.DataFrame(Te_y).value_counts(sort = False)[1])
             fp.append(mat[0][1] + mat[2][1])
             fn.append(mat[1][0] + mat[1][2])
             kappa.append(cohens_kappa(mat[1][1], fp[-1], fn[-1], mat[0][0]+ mat[2][2]))
-        elif val == val[2]:
+        elif val == vals[2]:
             est.append(mat[0][2] + mat[1][2] + mat[2][2])
             human_est.append(pd.DataFrame(Te_y).value_counts(sort = False)[2])
             fp.append(mat[0][2] + mat[1][2])
@@ -322,13 +337,13 @@ def trustworthy_process( s, code):
     Returns
     -------
     tuple of full data frame for each data subset (subsets defined by systematic variable of interest), tuple
-        DESCRIPTION.
+
     N_each, int
-        Description
+
     tuple of X for each data subset
-        Description
+
     tuple of y for each data subset
-        Description
+ 
     """
     #read in the data
     df = pd.read_csv(r'trustworthy_dat.csv')
@@ -380,13 +395,13 @@ def sources_process( s, code ):
     Returns
     -------
     tuple of full data frame for each data subset (subsets defined by systematic variable of interest), tuple
-        DESCRIPTION.
+
     N_each, int
-        Description
+
     tuple of X for each data subset
-        Description
+
     tuple of y for each data subset
-        Description
+
     """
     #read in the data
     df = pd.read_csv(r'PLO_dat.csv')
@@ -403,7 +418,7 @@ def sources_process( s, code ):
     BMs = BM.sample(frac=1).reset_index(drop=True)
     SGs = SG.sample(frac=1).reset_index(drop=True)
     SSs = SS.sample(frac=1).reset_index(drop=True)
-
+    """
     #Pull out only the first 239 from each experiment (because min response number 239 for SS)
     PMs = PMs.iloc[:239]
     BMs = BMs.iloc[:239]
@@ -412,7 +427,7 @@ def sources_process( s, code ):
     #Keep the 468-239 additional PM responses because those will be useful
     PM_add = PMs.iloc[239:]
     BM_add = BMs.iloc[239:]
-
+    """
 
     N_each = len(PMs)
     assert(N_each*4 - 200 > 700)
@@ -510,7 +525,6 @@ def get_data(train_dec, test_dec, code, val, s, opt_trustworthy = False):
             elif not condition_met:
                 X_neg.append(X_s[sub_idx][idx])
                 y_neg.append(y_s[sub_idx][idx])
-
     """
     X_PRE_pos = []
     X_PRE_neg = []
@@ -552,7 +566,6 @@ def get_data(train_dec, test_dec, code, val, s, opt_trustworthy = False):
     if len(X_pos) < N_pos_train + N_pos_test or len(X_neg) < N_neg_train + N_neg_test:
         return pd.DataFrame()
 
-    
     #create X and y for fixed training set
     Train_X = X_pos[:N_pos_train] + X_neg[:N_neg_train]
     Train_y = np.concatenate((y_pos[:N_pos_train],y_neg[:N_neg_train]))
@@ -596,7 +609,8 @@ def get_data(train_dec, test_dec, code, val, s, opt_trustworthy = False):
         return pd.DataFrame()
     if sum(1 for i in Train_y if i == val)<2:
         warnings.warn("Less than 2 examples of code in Training set")
-    test_bank.tests_on_inputs(df_s, Train_X, Train_y, full_test_X, full_test_y, N_each, val, opt_trustworthy)
+    test_bank.tests_on_inputs(df_s, Train_X, Train_y, full_test_X, full_test_y, N_each, val, opt_trustworthy )
     #might be able to not output the human dfs because of the tests, write down where that info can be gathered elsewhere
-    test_bank.tests_on_outputs(df["est"], df["human_est"],df["fp"], df["fn"], df_human)
+    test_bank.tests_on_outputs(df["est"], df["human_est"],df["fp"], df["fn"], df_human, test_dec, train_dec, full_test_max)
+    print(df_human)
     return df

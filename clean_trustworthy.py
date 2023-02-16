@@ -7,6 +7,8 @@ Created on Wed Feb  1 14:33:03 2023
 import pandas as pd
 
 df = pd.read_excel (r'Trustworthy_Master_Spreadsheet_Summer_2022.xlsx')
+df2 = pd.read_excel(r'Trustworthy_F22_Spreadsheet.xlsx')
+df = pd.concat([df,df2])
 df["Trustworthy Response"] = df["Trustworthy Response"].str.replace(".","")
 df = df[df["Trustworthy Response"].notnull()]
 df = df[df["Trustworthy Response"].str.len()>1]
