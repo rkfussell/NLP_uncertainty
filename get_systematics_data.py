@@ -138,25 +138,29 @@ def logreg1(s,tokenizer, Xtrain, Xtest, Train_y, Test_y):
     Log.fit(Xtrain,Train_y)
     # predict the labels on validation dataset
     predictions_Log = Log.predict(Xtest)
-    #if s==0:
-    if False:
+    if True:
+    #if False:
         #Log.coef_[2][i] for principles, Log.coef_[0][i] for limitations
-        coefs_dict = {i: Log.coef_[0][i] for i in range(len(Log.coef_[0]))}
+        coefs_dict = {i: np.exp(Log.coef_[0][i]) for i in range(len(Log.coef_[0]))}
         sorted_dict = {}
         sorted_keys = sorted(coefs_dict, key=coefs_dict.get) 
         words_dict = dict((v,k) for k,v in tokenizer.word_index.items())
         #for w in sorted_keys:
         #    sorted_dict[w] = coefs_dict[w]
         #print(sorted_dict)
+        words = []
+        coefs = []
         print("\nNegative:")
         for num in sorted_keys[:10]:
-            print(words_dict[num])
+            words.append(words_dict[num])
+            coefs.append(coefs_dict[num])
         print("\nPositive:")
         for num in sorted_keys[-20:]:
-            print(words_dict[num])
-    return confusion_matrix(Test_y, predictions_Log)
+            words.append(words_dict[num])
+            coefs.append(coefs_dict[num])
+    return confusion_matrix(Test_y, predictions_Log), words, coefs
 
-def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, trials = 100):
+def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, N_test):
     """
     Run the logistic regression for many trials, store and return all relevant data (e.g. computer est, human est, rate of false negatives and rate of false positives)
     
@@ -189,7 +193,7 @@ def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, trials = 100):
     fn = []
     human_est = []
     kappa = []
-    for s in range(trials):
+    for s in range(N_test):
         set_random_seed(seed = s)
         tok = Tokenizer(lower = False)
         #tok.fit_on_texts(Train_X)
@@ -213,7 +217,8 @@ def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, trials = 100):
 
         Te_X = tok.texts_to_matrix(Te_X, mode="binary")
         #run the logistic regression, store confusion matrix as mat
-        mat = logreg1(s,tok, Tr_X, Te_X, train_y, Te_y)
+        mat, words, coefs = logreg1(s,tok, Tr_X, Te_X, train_y, Te_y)
+        word_weights = pd.DataFrame({'words' : words, 'coefficients' : coefs})
         #extract useful measures from mat
         est.append(mat[1][1] + mat[0][1])
         human_est.append(pd.DataFrame(Te_y).value_counts(sort = False)[1])
@@ -233,9 +238,9 @@ def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, trials = 100):
         "train_y": pd.DataFrame(train_y).value_counts(sort = False),
         "test_y": pd.DataFrame(test_y).value_counts(sort = False)})
     
-    return df, df_human
+    return df, df_human, word_weights
 
-def get_stats_est_fp_fn_3code(train_x, train_y, test_x, test_y, val, trials = 100):
+def get_stats_est_fp_fn_3code(train_x, train_y, test_x, test_y, val, N_test):
     """
     Run the logistic regression for many trials, store and return all relevant data (e.g. computer est, human est, rate of false negatives and rate of false positives)
     
@@ -267,7 +272,7 @@ def get_stats_est_fp_fn_3code(train_x, train_y, test_x, test_y, val, trials = 10
     fn = []
     human_est = []
     kappa = []
-    for s in range(trials):
+    for s in range(N_test):
         set_random_seed(seed = s)
         tok = Tokenizer(lower = False)
         #tok.fit_on_texts(Train_X)
@@ -291,7 +296,8 @@ def get_stats_est_fp_fn_3code(train_x, train_y, test_x, test_y, val, trials = 10
                 return pd.DataFrame(), pd.DataFrame()
 
         Te_X = tok.texts_to_matrix(Te_X, mode="binary")
-        mat= logreg1(s,tok, Tr_X, Te_X, train_y, Te_y)
+        mat, words, coefs = logreg1(s,tok, Tr_X, Te_X, train_y, Te_y)
+        word_weights = pd.DataFrame({'words' : words, 'coefficients' : coefs})
         #list of 3 codes in alphabetical order
         if val == vals[0]:
             est.append(mat[0][0] + mat[1][0] + mat[2][0])
@@ -322,7 +328,7 @@ def get_stats_est_fp_fn_3code(train_x, train_y, test_x, test_y, val, trials = 10
         "train_y": pd.DataFrame(train_y).value_counts(sort = False),
         "test_y": pd.DataFrame(test_y).value_counts(sort = False)})
     
-    return df, df_human
+    return df, df_human, word_weights
 def trustworthy_process( s, code):
     """
     Pre-process trustworthy data, break into data subsets PRE and POST
@@ -379,7 +385,7 @@ def trustworthy_process( s, code):
     
     return (POST, PRE), N_each, (X_PRE, X_POST), (y_PRE, y_POST)
 
-def sources_process( s, code ):
+def sources_process( s, code, val ):
     """
     Pre-process sources of uncertainty data, break into groups of systematic variable.
     
@@ -437,30 +443,43 @@ def sources_process( s, code ):
     for response in PMs["Q"].tolist():
         X_PMs.append(preprocess_text(response))
     y_PMs = np.array(PMs[code].tolist())
+    if val == 1:
+        is_L = [1 if row == "L" else 0 for row in PMs[code]]
+        y_PMs = np.array(is_L)
+    else:
+        y_PMs = np.array(PMs[code].tolist())
     
     X_BMs = []
     for response in BMs["Q"].tolist():
         X_BMs.append(preprocess_text(response))
-    y_BMs = np.array(BMs[code].tolist())
+    if val == 1:
+        is_L = [1 if row == "L" else 0 for row in BMs[code]]
+        y_BMs = np.array(is_L)
+    else:
+        y_BMs = np.array(BMs[code].tolist())
     
     X_SGs = []
     for response in SGs["Q"].tolist():
         X_SGs.append(preprocess_text(response))
-    y_SGs = np.array(SGs[code].tolist())
+    if val == 1:
+        is_L = [1 if row == "L" else 0 for row in SGs[code]]
+        y_SGs = np.array(is_L)
+    else:
+        y_SGs = np.array(SGs[code].tolist())
     
     X_SSs = []
     for response in SSs["Q"].tolist():
         X_SSs.append(preprocess_text(response))
-    y_SSs = np.array(SSs[code].tolist())
+    if val == 1:
+        is_L = [1 if row == "L" else 0 for row in SSs[code]]
+        y_SSs = np.array(is_L)
+    else:
+        y_SSs = np.array(SSs[code].tolist())
     
-    X_PM_add = []
-    for response in PMs["Q"].tolist():
-        X_PM_add.append(preprocess_text(response))
-    y_PM_add = np.array(PMs[code].tolist())
     
     return (PMs, BMs, SGs, SSs), N_each, (X_PMs, X_BMs, X_SGs, X_SSs), (y_PMs, y_BMs, y_SGs, y_SSs)
 
-def get_data(train_dec, test_dec, code, val, s, opt_trustworthy = False):
+def get_data(train_dec, test_dec, code, val, s, full_test_max, N_test, opt_trustworthy = False):
     """
     
     code is a string, the category of response in human coded data
@@ -493,11 +512,11 @@ def get_data(train_dec, test_dec, code, val, s, opt_trustworthy = False):
     
     if opt_trustworthy:
         df_s, N_each, X_s, y_s =  trustworthy_process(s, code)
-        full_test_max = 200 
+        #full_test_max = 200 
         train_size = 600
     else:
-        df_s, N_each, X_s, y_s = sources_process(s, code)
-        full_test_max = 150 
+        df_s, N_each, X_s, y_s = sources_process(s, code, val)
+        #full_test_max = 150
         train_size = 600
     
     #number of pos and neg in test and training sets
@@ -553,27 +572,71 @@ def get_data(train_dec, test_dec, code, val, s, opt_trustworthy = False):
     X_pos = X_PRE_pos + X_POST_pos
     X_neg = X_PRE_neg + X_POST_neg
     """
+    #add code to evenly split O and P in the case of limitations
+    X_O = []
+    y_O = []
+    X_P = []
+    y_P = []
+    if val == "L":
+        for idx in range(len(y_neg)):
+            if y_neg[idx] == "O":
+                X_O.append(X_neg[idx])
+                y_O.append(y_neg[idx])
+            elif y_neg[idx] == "P":
+                X_P.append(X_neg[idx])
+                y_P.append(y_neg[idx])
+            else:
+                assert(y_neg[idx] == "O" or y_neg[idx] == "P")
+            
+        assert(sum(1 for i in y_O if i == "O")/len(y_O) == 1.0)
+        assert(sum(1 for i in y_P if i == "P")/len(y_P) == 1.0)
+        
+        random.shuffle(X_pos)
+        random.shuffle(X_O)
+        random.shuffle(X_P)
+        
+        print("length X_pos " + str(len(X_pos)))
+        print("length X_O " + str(len(X_O)))
+        print("length X_O " + str(len(X_O)))
+        
+        lesser = len(X_O) if len(X_O) < len(X_P) else len(X_P)
+        if len(X_pos) < N_pos_train + N_pos_test or lesser*2 < N_neg_train + N_neg_test:
+            return pd.DataFrame()
+        
+        N_neg_train_O = int(math.ceil(N_neg_train/2))
+        N_neg_train_P = int(math.floor(N_neg_train/2))
+        N_neg_test_O = int(math.ceil(N_neg_test/2))
+        N_neg_test_P = int(math.floor(N_neg_test/2))
+        
+        #create X and y for fixed training set
+        Train_X = X_pos[:N_pos_train] + X_O[:N_neg_train_O] + X_P[:N_neg_train_P]
+        Train_y = np.concatenate((y_pos[:N_pos_train],y_O[:N_neg_train_O], y_P[:N_neg_train_P]))
+        
+        #create a test set that is sampled later
+        full_test_X = X_pos[N_pos_train:N_pos_train + N_pos_test] + X_O[N_neg_train_O: N_neg_train_O + N_neg_test_O] + X_P[N_neg_train_P: N_neg_train_P + N_neg_test_P]
+        full_test_y = np.concatenate((y_pos[N_pos_train:N_pos_train + N_pos_test], y_O[N_neg_train_O: N_neg_train_O + N_neg_test_O], y_P[N_neg_train_P: N_neg_train_P + N_neg_test_P]))
+        
+    else:
+        assert(sum(1 for i in y_pos if i == val)/len(y_pos) == 1.0)
+        assert(sum(1 for i in y_neg if i == val)/len(y_neg) == 0.0)
+        
+        random.shuffle(X_pos)
+        random.shuffle(X_neg)
+        
+        print("length X_pos " + str(len(X_pos)))
+        print("length X_neg " + str(len(X_neg)))
+        
+        if len(X_pos) < N_pos_train + N_pos_test or len(X_neg) < N_neg_train + N_neg_test:
+            return pd.DataFrame()
     
-    assert(sum(1 for i in y_pos if i == val)/len(y_pos) == 1.0)
-    assert(sum(1 for i in y_neg if i == val)/len(y_neg) == 0.0)
-    
-    random.shuffle(X_pos)
-    random.shuffle(X_neg)
-    
-    print("length X_pos " + str(len(X_pos)))
-    print("length X_neg " + str(len(X_neg)))
-    
-    if len(X_pos) < N_pos_train + N_pos_test or len(X_neg) < N_neg_train + N_neg_test:
-        return pd.DataFrame()
-
-    #create X and y for fixed training set
-    Train_X = X_pos[:N_pos_train] + X_neg[:N_neg_train]
-    Train_y = np.concatenate((y_pos[:N_pos_train],y_neg[:N_neg_train]))
-    
-    #create a test set that is sampled later
-    full_test_X = X_pos[N_pos_train:N_pos_train + N_pos_test] + X_neg[N_neg_train: N_neg_train + N_neg_test]
-    full_test_y = np.concatenate((y_pos[N_pos_train:N_pos_train + N_pos_test], y_neg[N_neg_train: N_neg_train + N_neg_test]))
-    
+        #create X and y for fixed training set
+        Train_X = X_pos[:N_pos_train] + X_neg[:N_neg_train]
+        Train_y = np.concatenate((y_pos[:N_pos_train],y_neg[:N_neg_train]))
+        
+        #create a test set that is sampled later
+        full_test_X = X_pos[N_pos_train:N_pos_train + N_pos_test] + X_neg[N_neg_train: N_neg_train + N_neg_test]
+        full_test_y = np.concatenate((y_pos[N_pos_train:N_pos_train + N_pos_test], y_neg[N_neg_train: N_neg_train + N_neg_test]))
+        
     
     print("train X " + str(len(Train_X)))
     print("train y " + str(len(Train_y)))
@@ -601,14 +664,16 @@ def get_data(train_dec, test_dec, code, val, s, opt_trustworthy = False):
     """
     
     #Run logreg on 100 test set samples (equal test set)
-    if opt_trustworthy:
-        df, df_human = get_stats_est_fp_fn_binary(Train_X, Train_y, full_test_X, full_test_y)
+    #if opt_trustworthy:
+    if val == 1:
+        df, df_human, word_weights = get_stats_est_fp_fn_binary(Train_X, Train_y, full_test_X, full_test_y, N_test)
     else:
-        df, df_human = get_stats_est_fp_fn_3code(Train_X, Train_y, full_test_X, full_test_y, val)
+        df, df_human, word_weights = get_stats_est_fp_fn_3code(Train_X, Train_y, full_test_X, full_test_y, val, N_test)
     if df.empty:
         return pd.DataFrame()
     if sum(1 for i in Train_y if i == val)<2:
         warnings.warn("Less than 2 examples of code in Training set")
+    word_weights.to_csv("word_weights_code" + code + "_train" + str(train_dec) + "seed" + str(s) + ".csv")
     test_bank.tests_on_inputs(df_s, Train_X, Train_y, full_test_X, full_test_y, N_each, val, opt_trustworthy )
     #might be able to not output the human dfs because of the tests, write down where that info can be gathered elsewhere
     test_bank.tests_on_outputs(df["est"], df["human_est"],df["fp"], df["fn"], df_human, test_dec, train_dec, full_test_max)
