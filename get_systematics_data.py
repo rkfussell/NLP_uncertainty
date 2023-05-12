@@ -10,6 +10,7 @@ import random
 import test_bank
 import warnings
 import math
+import statistics
 
 import contractions
 import nltk
@@ -107,7 +108,10 @@ def cohens_kappa(tp,fp,fn,tn):
     #assert(isinstance(tn,int))
     num = 2*(tp*tn - fn*fp)
     denom = (tp+fp)*(fp+tn) + (tp+fn)*(fn+tn)
-    return num/denom
+    if denom != 0:
+        return num/denom
+    else:
+        return -1
 
 def logreg1(s,tokenizer, Xtrain, Xtest, Train_y, Test_y):
     """
@@ -138,8 +142,10 @@ def logreg1(s,tokenizer, Xtrain, Xtest, Train_y, Test_y):
     Log.fit(Xtrain,Train_y)
     # predict the labels on validation dataset
     predictions_Log = Log.predict(Xtest)
+    words = []
+    coefs = []
+    #if s == 100:
     if True:
-    #if False:
         #Log.coef_[2][i] for principles, Log.coef_[0][i] for limitations
         coefs_dict = {i: np.exp(Log.coef_[0][i]) for i in range(len(Log.coef_[0]))}
         sorted_dict = {}
@@ -148,19 +154,79 @@ def logreg1(s,tokenizer, Xtrain, Xtest, Train_y, Test_y):
         #for w in sorted_keys:
         #    sorted_dict[w] = coefs_dict[w]
         #print(sorted_dict)
-        words = []
-        coefs = []
-        print("\nNegative:")
+        #print("\nNegative:")
         for num in sorted_keys[:10]:
             words.append(words_dict[num])
             coefs.append(coefs_dict[num])
-        print("\nPositive:")
+        #print("\nPositive:")
         for num in sorted_keys[-20:]:
             words.append(words_dict[num])
             coefs.append(coefs_dict[num])
-    return confusion_matrix(Test_y, predictions_Log), words, coefs
+        print(words)
+        print(coefs)
+        print(Log.predict_proba(Xtest))
+        
+    return confusion_matrix(Test_y, predictions_Log), words, coefs, Log.predict_proba(Xtest)
+def get_predicts_binary(s, train_x,train_y, test_x):
+    """
+    Run the logistic regression for many trials, store and return all relevant data (e.g. computer est, human est, rate of false negatives and rate of false positives)
+    
+    For binary classification tasks. 
+    
+    Parameters
+    ----------
+    s : integer
+        s is an integer specifying random seed.
+    train_x : numpy array
+        X (encoded responses) of training set
+    train_y : numpy array
+        y (classification) of training set
+    test_x : numpy array
+        data to be coded
 
-def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, N_test):
+    Returns
+    -------
+    predictions_Log : numpy array
+        the model's classification of the new data set
+
+    """
+    tok = Tokenizer(lower = False)
+    #tok.fit_on_texts(Train_X)
+    tok.fit_on_texts(train_x)
+    #Tr_X = tok.texts_to_matrix(Train_X, mode="binary")
+    Tr_X = tok.texts_to_matrix(train_x, mode="binary")
+    Te_X = tok.texts_to_matrix(test_x, mode="binary")
+    #run the logistic regression
+    set_random_seed(seed = s)
+    Log = linear_model.LogisticRegression(random_state = s, max_iter = 10000)
+    Log.fit(Tr_X,train_y)
+    # predict the labels on validation dataset
+    predictions_Log = Log.predict(Te_X)
+    
+    words = []
+    coefs = []
+    #Log.coef_[2][i] for principles, Log.coef_[0][i] for limitations
+    coefs_dict = {i: np.exp(Log.coef_[0][i]) for i in range(len(Log.coef_[0]))}
+    sorted_dict = {}
+    sorted_keys = sorted(coefs_dict, key=coefs_dict.get) 
+    words_dict = dict((v,k) for k,v in tok.word_index.items())
+    #for w in sorted_keys:
+    #    sorted_dict[w] = coefs_dict[w]
+    #print(sorted_dict)
+    #print("\nNegative:")
+    for num in sorted_keys[:10]:
+        words.append(words_dict[num])
+        coefs.append(coefs_dict[num])
+    #print("\nPositive:")
+    for num in sorted_keys[-20:]:
+        words.append(words_dict[num])
+        coefs.append(coefs_dict[num])
+    print(words)
+    print(coefs)
+    return predictions_Log
+    
+    
+def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, n):
     """
     Run the logistic regression for many trials, store and return all relevant data (e.g. computer est, human est, rate of false negatives and rate of false positives)
     
@@ -176,9 +242,8 @@ def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, N_test):
         X (encoded responses) of test set, random samples of 100 pulled from here in all trials
     test_y : numpy array
         X (encoded responses) of test set, random samples of 100 pulled from here in all trials
-    trials : int, optional
-        Number of random samples to pull from the test sets to get multiple trials from the training set. The default is 100.
-
+    n : int
+        for each test, a sample of size n is pulled from the full test set
 
     Returns
     -------
@@ -193,7 +258,8 @@ def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, N_test):
     fn = []
     human_est = []
     kappa = []
-    for s in range(N_test):
+    #pull 100 samples from the full test set
+    for s in range(100):
         set_random_seed(seed = s)
         tok = Tokenizer(lower = False)
         #tok.fit_on_texts(Train_X)
@@ -202,26 +268,40 @@ def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, N_test):
         Tr_X = tok.texts_to_matrix(train_x, mode="binary")
         #make test set, must have at least 2 examples of the code
         enough_pos_in_test = False
-        n = 0
-        while not enough_pos_in_test:
-            set_random_seed(seed = s + n*100)
-            _, Te_X, _, Te_y = model_selection.train_test_split(test_x,test_y,test_size=100)
-            if sum(Te_y)<2:
-                n +=1
-                print(n)
-            else:
-                enough_pos_in_test = True
-                
-            if n > 21:
-                return pd.DataFrame(), pd.DataFrame()
+        i = 0
+        if False:
+            while not enough_pos_in_test:
+                set_random_seed(seed = s + i*100)
+                _, Te_X, _, Te_y = model_selection.train_test_split(test_x,test_y,test_size=n)
+                if sum(Te_y)/len(Te_y) == 0.0 or sum(Te_y)/len(Te_y) == 1.0:
+                    i +=1
+                    #print(i)
+                else:
+                    enough_pos_in_test = True
+                if i > 11:
+                    print(i)
+                    return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        _, Te_X, _, Te_y = model_selection.train_test_split(test_x,test_y,test_size=n)
 
         Te_X = tok.texts_to_matrix(Te_X, mode="binary")
         #run the logistic regression, store confusion matrix as mat
-        mat, words, coefs = logreg1(s,tok, Tr_X, Te_X, train_y, Te_y)
-        word_weights = pd.DataFrame({'words' : words, 'coefficients' : coefs})
+        mat, words, coefs, probas = logreg1(s,tok, Tr_X, Te_X, train_y, Te_y)
+        if len(mat[0])<2:
+            print("mat[0]<2")
+            if sum(Te_y)== 0.0:
+                mat = np.array([[n,0],[0,0]])
+            else:
+                mat = np.array([[0,0],[0,n]])
+        if len(words) >0:
+            word_weights = pd.DataFrame({'words' : words, 'coefficients' : coefs})
+        else:
+            word_weights = None
         #extract useful measures from mat
         est.append(mat[1][1] + mat[0][1])
-        human_est.append(pd.DataFrame(Te_y).value_counts(sort = False)[1])
+        if sum(Te_y)/len(Te_y) == 0.0 or sum(Te_y)/len(Te_y) == 1.0:
+            human_est.append(sum(Te_y))
+        else:
+            human_est.append(pd.DataFrame(Te_y).value_counts(sort = False)[1])
         fp.append(mat[0][1])
         fn.append(mat[1][0])
         kappa.append(cohens_kappa(mat[1][1], mat[1][0], mat[0][1], mat[0][0]))
@@ -234,13 +314,18 @@ def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, N_test):
         "kappa" : kappa,
         "human_est": human_est
     })
-    df_human = pd.DataFrame({
-        "train_y": pd.DataFrame(train_y).value_counts(sort = False),
-        "test_y": pd.DataFrame(test_y).value_counts(sort = False)})
+    if sum(Te_y)/len(Te_y) == 0.0 or sum(Te_y)/len(Te_y) == 1.0:
+        df_human = pd.DataFrame({
+            "train_y": pd.DataFrame(train_y).value_counts(sort = False),
+            "test_y": sum(test_y)})
+    else:
+        df_human = pd.DataFrame({
+            "train_y": pd.DataFrame(train_y).value_counts(sort = False),
+            "test_y": pd.DataFrame(test_y).value_counts(sort = False)})
     
     return df, df_human, word_weights
 
-def get_stats_est_fp_fn_3code(train_x, train_y, test_x, test_y, val, N_test):
+def get_stats_est_fp_fn_3code(train_x, train_y, test_x, test_y, val, n):
     """
     Run the logistic regression for many trials, store and return all relevant data (e.g. computer est, human est, rate of false negatives and rate of false positives)
     
@@ -256,9 +341,11 @@ def get_stats_est_fp_fn_3code(train_x, train_y, test_x, test_y, val, N_test):
         X (encoded responses) of test set, random samples of 100 pulled from here in all trials
     test_y : numpy array
         X (encoded responses) of test set, random samples of 100 pulled from here in all trials
-    trials : int, optional
-        Number of random samples to pull from the test sets to get multiple trials from the training set. The default is 100.
-
+    val : string or int
+        estimate frequency in dataset of this value of code (e.g. "L" or 1 for binary data (trustworthy))
+    n : int
+        for each test, a sample of size n is pulled from the full test set
+    
     Returns
     -------
     df: pandas_dataframe 
@@ -272,7 +359,8 @@ def get_stats_est_fp_fn_3code(train_x, train_y, test_x, test_y, val, N_test):
     fn = []
     human_est = []
     kappa = []
-    for s in range(N_test):
+    #pull 100 samples from the full test set
+    for s in range(100):
         set_random_seed(seed = s)
         tok = Tokenizer(lower = False)
         #tok.fit_on_texts(Train_X)
@@ -281,22 +369,22 @@ def get_stats_est_fp_fn_3code(train_x, train_y, test_x, test_y, val, N_test):
         Tr_X = tok.texts_to_matrix(train_x, mode="binary")
         #make test set, must have at least 2 examples of the code
         enough_pos_in_test = False
-        n = 0
+        i = 0
         while not enough_pos_in_test:
-            set_random_seed(seed = s + n*100)
-            _, Te_X, _, Te_y = model_selection.train_test_split(test_x,test_y,test_size=100)
+            set_random_seed(seed = s + i*100)
+            _, Te_X, _, Te_y = model_selection.train_test_split(test_x,test_y,test_size=n)
             vals = ["L","O","P"]
-            if sum(1 for i in Te_y if i == vals[0])<2 or sum(1 for i in Te_y if i == vals[1])<2 or sum(1 for i in Te_y if i == vals[2])<2:
-                n += 1
-                print(n)
+            if sum(1 for j in Te_y if j == vals[0])<2 or sum(1 for j in Te_y if j == vals[1])<2 or sum(1 for j in Te_y if j == vals[2])<2:
+                i += 1
+                print(i)
             else:
                 enough_pos_in_test = True
                 
-            if n > 21:
+            if i > 21:
                 return pd.DataFrame(), pd.DataFrame()
 
         Te_X = tok.texts_to_matrix(Te_X, mode="binary")
-        mat, words, coefs = logreg1(s,tok, Tr_X, Te_X, train_y, Te_y)
+        mat, words, coefs, probas = logreg1(s,tok, Tr_X, Te_X, train_y, Te_y)
         word_weights = pd.DataFrame({'words' : words, 'coefficients' : coefs})
         #list of 3 codes in alphabetical order
         if val == vals[0]:
@@ -352,18 +440,24 @@ def trustworthy_process( s, code):
  
     """
     #read in the data
-    df = pd.read_csv(r'trustworthy_dat.csv')
+    df_full = pd.read_csv(r'trustworthy_dat.csv')
     #create equal sized, shuffled pre and post data frames. these are fixed and do not depend on seed.
+    if code == "Uncertainty":
+        df  = df_full[df_full["Semester"] != "F2022"]
+        F22 = df_full[df_full["Semester"] == "F2022"]
+    else:
+        df = df_full
     POST = df[df["PRE/POST"] == "POST"]
     PRE = df[df["PRE/POST"] == "PRE"]
     
     set_random_seed(seed = s)
     POST = POST.sample(frac=1).reset_index(drop=True)
     PRE = PRE.sample(frac=1).reset_index(drop=True)
-    print(len(PRE))
-    print(len(POST))
+    #print(len(PRE))
+    #print(len(POST))
     N_each = len(PRE) if len(PRE) < len(POST) else len(POST)
     assert(N_each > 800)
+    
     
     #keep N_each from both PRE and POST because there are only N_each in PRE (same every time, fixed at seed 132)
     PRE = PRE[:N_each]
@@ -382,10 +476,14 @@ def trustworthy_process( s, code):
     for response in POST["Trustworthy Response"].tolist():
         X_POST.append(preprocess_text(response))
     y_POST = np.array(POST[code].tolist())
-    
-    return (POST, PRE), N_each, (X_PRE, X_POST), (y_PRE, y_POST)
+    X_F22 = []
+    if code == "Uncertainty":
+        for response in F22["Trustworthy Response"].tolist():
+            X_F22.append(preprocess_text(response))
+        return (PRE, POST), N_each, (X_PRE, X_POST), (y_PRE, y_POST), X_F22
+    return (PRE, POST), N_each, (X_PRE, X_POST), (y_PRE, y_POST)
 
-def sources_process( s, code, val ):
+def sources_process( s, code, val , systematic = "all"):
     """
     Pre-process sources of uncertainty data, break into groups of systematic variable.
     
@@ -397,6 +495,10 @@ def sources_process( s, code, val ):
         s is an integer specifying random seed.
     code : string
         the category of response in human coded data.
+    val : string or int
+        estimate frequency in dataset of this value of code (e.g. "L" or 1 for binary data (trustworthy))
+    systematic: string
+        denotes how data is split based on a variable, "all" for no split/all data
 
     Returns
     -------
@@ -414,6 +516,16 @@ def sources_process( s, code, val ):
     df = df[df["Q"].notnull()]
     df = df[df["Q"].str.len()>1]
     
+    if systematic == "upper":
+        df = df[df["intro/upper"]== "upper"]
+    elif systematic == "intro":
+        df = df[df["intro/upper"]== "intro"]
+        
+    if systematic == "male":
+        df = df[df["Gender"]== "Male"]
+    elif systematic == "gender-min":
+        df = pd.concat([df[df["Gender"]== "Female"], df[df["Gender"]== "Non-binary"]])
+        
     #Split by experiment, then shuffle all the rows randomly but deterministically
     PM = df[df["Exp"] =="PM"]
     BM = df[df["Exp"] =="BM"]
@@ -436,7 +548,8 @@ def sources_process( s, code, val ):
     """
 
     N_each = len(PMs)
-    assert(N_each*4 - 200 > 700)
+    if systematic == "all":
+        assert(N_each*4 - 200 > 700)
     
     #pre process responses (X) and match to code value (y) 
     X_PMs = []
@@ -449,57 +562,66 @@ def sources_process( s, code, val ):
     else:
         y_PMs = np.array(PMs[code].tolist())
     
-    X_BMs = []
-    for response in BMs["Q"].tolist():
-        X_BMs.append(preprocess_text(response))
-    if val == 1:
-        is_L = [1 if row == "L" else 0 for row in BMs[code]]
-        y_BMs = np.array(is_L)
-    else:
-        y_BMs = np.array(BMs[code].tolist())
-    
-    X_SGs = []
-    for response in SGs["Q"].tolist():
-        X_SGs.append(preprocess_text(response))
-    if val == 1:
-        is_L = [1 if row == "L" else 0 for row in SGs[code]]
-        y_SGs = np.array(is_L)
-    else:
-        y_SGs = np.array(SGs[code].tolist())
-    
-    X_SSs = []
-    for response in SSs["Q"].tolist():
-        X_SSs.append(preprocess_text(response))
-    if val == 1:
-        is_L = [1 if row == "L" else 0 for row in SSs[code]]
-        y_SSs = np.array(is_L)
-    else:
-        y_SSs = np.array(SSs[code].tolist())
-    
-    
-    return (PMs, BMs, SGs, SSs), N_each, (X_PMs, X_BMs, X_SGs, X_SSs), (y_PMs, y_BMs, y_SGs, y_SSs)
+    if systematic != "intro" and systematic != "upper":
+        X_BMs = []
+        for response in BMs["Q"].tolist():
+            X_BMs.append(preprocess_text(response))
+        if val == 1:
+            is_L = [1 if row == "L" else 0 for row in BMs[code]]
+            y_BMs = np.array(is_L)
+        else:
+            y_BMs = np.array(BMs[code].tolist())
+        
+        X_SGs = []
+        for response in SGs["Q"].tolist():
+            X_SGs.append(preprocess_text(response))
+        if val == 1:
+            is_L = [1 if row == "L" else 0 for row in SGs[code]]
+            y_SGs = np.array(is_L)
+        else:
+            y_SGs = np.array(SGs[code].tolist())
+        
+        X_SSs = []
+        for response in SSs["Q"].tolist():
+            X_SSs.append(preprocess_text(response))
+        if val == 1:
+            is_L = [1 if row == "L" else 0 for row in SSs[code]]
+            y_SSs = np.array(is_L)
+        else:
+            y_SSs = np.array(SSs[code].tolist())
+        
+        
+        return (PMs, BMs, SGs, SSs), N_each, (X_PMs, X_BMs, X_SGs, X_SSs), (y_PMs, y_BMs, y_SGs, y_SSs)
+    elif systematic == "upper" or systematic == "intro":
+        return (PMs,), N_each, (X_PMs,), (y_PMs,)
 
-def get_data(train_dec, test_dec, code, val, s, full_test_max, N_test, opt_trustworthy = False):
+def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_test = "all", opt_trustworthy = False):
     """
-    
     code is a string, the category of response in human coded data
     N_each is the number of responses after cleaning 
 
     Parameters
     ----------
     train_dec : float
-        Number between 0 and 1 specifying fraction of PRE to put in training set.
+        Number between 0 and 1 specifying fraction of responses with the code to put in training set.
     test_dec : float
-        Number between 0 and 1 specifying fraction of PRE to put in test set.
+        Number between 0 and 1 specifying fraction of responses with the code to put in test set.
     code : string
         the category of response in human coded data.
     val : string or int
         estimate frequency in dataset of this value of code (e.g. "L" or 1 for binary data (trustworthy))
     s : integer
         s is an integer specifying random seed.
+    n_full: int
+        number of responses in the full test set 
+    n : int
+        for each test, a sample of size n is pulled from the full test set
+    train_size: int
+        number of responses in the training set
+    split_test : string
+        denotes if data are split based on metadata to test population systematics
     opt_trustworthy : bool
         True if working with Trustworthy data only
-    
 
     Returns
     -------
@@ -509,19 +631,39 @@ def get_data(train_dec, test_dec, code, val, s, full_test_max, N_test, opt_trust
         All data at this stage has been run through the test_bank. 
 
     """
-    
-    if opt_trustworthy:
+
+    if opt_trustworthy and code == "Uncertainty":
+        df_s, N_each, X_s, y_s, X_F22 =  trustworthy_process(s, code)
+        #train_size = 600
+    elif opt_trustworthy:
         df_s, N_each, X_s, y_s =  trustworthy_process(s, code)
-        #full_test_max = 200 
-        train_size = 600
+        #train_size = 600
+    #elif opt_trustworthy and (split_test == "pre" or split_test == "post"):
+    #    df_s, N_each, X_s, y_s =  trustworthy_process(s, code)
+    #    df_s_sys = (df_s[0],)
+    #    df_s = (df_s[1],)
+    #    X_s_sys = (X_s[0],)
+    #    X_s = (X_s[1],)
+    #    y_s_sys = (y_s[0],)
+    #    y_s = (y_s[1],)
+    #    #train_size = 550 
+    elif split_test == "upper" or split_test == "intro":
+        df_s, N_PM, X_s, y_s = sources_process(s, code, val, systematic = "intro")
+        df_s_sys, N_PM_sys, X_s_sys, y_s_sys = sources_process(s, code, val, systematic = "upper")
+        #train_size = 550
+        print(N_PM)
+        print(N_PM_sys)
+    elif split_test == "male" or split_test == "gender-min":
+        df_s, N_each, X_s, y_s = sources_process(s, code, val, systematic = "male")
+        df_s_sys, N_each, X_s_sys, y_s_sys = sources_process(s, code, val, systematic = "gender-min")
+        #train_size = 600
     else:
-        df_s, N_each, X_s, y_s = sources_process(s, code, val)
-        #full_test_max = 150
-        train_size = 600
+        df_s, N_each, X_s, y_s = sources_process(s, code, val, systematic = split_test)
+        #train_size = 600
     
     #number of pos and neg in test and training sets
-    N_pos_test = math.floor(full_test_max*test_dec)
-    N_neg_test = full_test_max - N_pos_test
+    N_pos_test = math.floor(n_full*test_dec)
+    N_neg_test = n_full - N_pos_test
     N_pos_train = math.floor(train_size*train_dec)
     N_neg_train = train_size - N_pos_train
     
@@ -530,12 +672,47 @@ def get_data(train_dec, test_dec, code, val, s, full_test_max, N_test, opt_trust
     print("N_neg_test " + str(N_neg_test))
     print("N_pos_train " + str(N_pos_train))
     print("N_neg_train " + str(N_neg_train))
-    
+                
+    if opt_trustworthy  and code == "Uncertainty" or split_test == "pre" or split_test == "postpre":
+        X_pre_pos = []
+        X_pre_neg = []
+        y_pre_pos = []
+        y_pre_neg = []
+        
+        X_post_pos = []
+        X_post_neg = []
+        y_post_pos = []
+        y_post_neg = []
+        
+        X_pre = X_s[0]
+        X_post = X_s[1]
+        
+        y_pre = y_s[0]
+        y_post = y_s[1]
+        
+        for idx, condition_met in enumerate(y_pre == val):
+            if condition_met:
+                X_pre_pos.append(X_pre[idx])
+                y_pre_pos.append(y_pre[idx])
+            elif not condition_met:
+                X_pre_neg.append(X_pre[idx])
+                y_pre_neg.append(y_pre[idx])
+        for idx, condition_met in enumerate(y_post == val):
+            if condition_met:
+                X_post_pos.append(X_post[idx])
+                y_post_pos.append(y_post[idx])
+            elif not condition_met:
+                X_post_neg.append(X_post[idx])
+                y_post_neg.append(y_post[idx])
+                    
+      
     X_pos = []
     X_neg = []
     y_pos = []
     y_neg = []
     #sub denotes the subgroups of a dataset, e.g. pre and post for trustworthy, experiment type for sources
+    
+
     for sub_idx in range(len(X_s)):
         for idx, condition_met in enumerate(y_s[sub_idx] == val):
             if condition_met:
@@ -543,41 +720,15 @@ def get_data(train_dec, test_dec, code, val, s, full_test_max, N_test, opt_trust
                 y_pos.append(y_s[sub_idx][idx])
             elif not condition_met:
                 X_neg.append(X_s[sub_idx][idx])
-                y_neg.append(y_s[sub_idx][idx])
-    """
-    X_PRE_pos = []
-    X_PRE_neg = []
-    X_POST_pos = []
-    X_POST_neg = []
-    y_PRE_pos = []
-    y_PRE_neg = []
-    y_POST_pos = []
-    y_POST_neg = []
-    
-    for idx, condition_met in enumerate(y_PRE == 1):
-        if condition_met:
-            X_PRE_pos.append(X_PRE[idx])
-            y_PRE_pos.append(y_PRE[idx])
-        elif not condition_met:
-            X_PRE_neg.append(X_PRE[idx])
-            y_PRE_neg.append(y_PRE[idx])
-    for idx, condition_met in enumerate(y_POST == 1):
-        if condition_met:
-            X_POST_pos.append(X_POST[idx])
-            y_POST_pos.append(y_POST[idx])
-        elif not condition_met:
-            X_POST_neg.append(X_POST[idx])
-            y_POST_neg.append(y_POST[idx])
-            
-    X_pos = X_PRE_pos + X_POST_pos
-    X_neg = X_PRE_neg + X_POST_neg
-    """
+                y_neg.append(y_s[sub_idx][idx])   
+
+
     #add code to evenly split O and P in the case of limitations
-    X_O = []
-    y_O = []
-    X_P = []
-    y_P = []
     if val == "L":
+        X_O = []
+        y_O = []
+        X_P = []
+        y_P = []
         for idx in range(len(y_neg)):
             if y_neg[idx] == "O":
                 X_O.append(X_neg[idx])
@@ -587,7 +738,7 @@ def get_data(train_dec, test_dec, code, val, s, full_test_max, N_test, opt_trust
                 y_P.append(y_neg[idx])
             else:
                 assert(y_neg[idx] == "O" or y_neg[idx] == "P")
-            
+        
         assert(sum(1 for i in y_O if i == "O")/len(y_O) == 1.0)
         assert(sum(1 for i in y_P if i == "P")/len(y_P) == 1.0)
         
@@ -617,26 +768,127 @@ def get_data(train_dec, test_dec, code, val, s, full_test_max, N_test, opt_trust
         full_test_y = np.concatenate((y_pos[N_pos_train:N_pos_train + N_pos_test], y_O[N_neg_train_O: N_neg_train_O + N_neg_test_O], y_P[N_neg_train_P: N_neg_train_P + N_neg_test_P]))
         
     else:
-        assert(sum(1 for i in y_pos if i == val)/len(y_pos) == 1.0)
-        assert(sum(1 for i in y_neg if i == val)/len(y_neg) == 0.0)
-        
-        random.shuffle(X_pos)
-        random.shuffle(X_neg)
-        
-        print("length X_pos " + str(len(X_pos)))
-        print("length X_neg " + str(len(X_neg)))
-        
-        if len(X_pos) < N_pos_train + N_pos_test or len(X_neg) < N_neg_train + N_neg_test:
-            return pd.DataFrame()
-    
-        #create X and y for fixed training set
-        Train_X = X_pos[:N_pos_train] + X_neg[:N_neg_train]
-        Train_y = np.concatenate((y_pos[:N_pos_train],y_neg[:N_neg_train]))
-        
-        #create a test set that is sampled later
-        full_test_X = X_pos[N_pos_train:N_pos_train + N_pos_test] + X_neg[N_neg_train: N_neg_train + N_neg_test]
-        full_test_y = np.concatenate((y_pos[N_pos_train:N_pos_train + N_pos_test], y_neg[N_neg_train: N_neg_train + N_neg_test]))
-        
+        #handle the pre/post separately in the uncertainty code case
+        if opt_trustworthy and code == "Uncertainty":
+            assert(sum(1 for i in y_pre_pos if i == val)/len(y_pre_pos) == 1.0)
+            assert(sum(1 for i in y_pre_neg if i == val)/len(y_pre_neg) == 0.0)
+            assert(sum(1 for i in y_post_pos if i == val)/len(y_post_pos) == 1.0)
+            assert(sum(1 for i in y_post_neg if i == val)/len(y_post_neg) == 0.0)
+            
+            random.shuffle(X_pre_pos)
+            random.shuffle(X_pre_neg)
+            random.shuffle(X_post_pos)
+            random.shuffle(X_post_neg)
+            
+            print("length X_pre_pos " + str(len(X_pre_pos)))
+            print("length X_pre_neg " + str(len(X_pre_neg)))
+            print("length X_post_pos " + str(len(X_post_pos)))
+            print("length X_post_neg " + str(len(X_post_neg)))
+            
+            
+            percent_pre = 0.5
+            
+            N_pos_train_pre = math.ceil(N_pos_train*percent_pre)
+            N_pos_train_post = math.floor(N_pos_train*(1-percent_pre))
+            N_neg_train_pre = math.ceil(N_neg_train*percent_pre)
+            N_neg_train_post = math.floor(N_neg_train*(1-percent_pre))
+            
+            N_pos_test_pre = math.floor(N_pos_test*percent_pre)
+            N_pos_test_post = math.ceil(N_pos_test*(1-percent_pre))
+            N_neg_test_pre = math.floor(N_neg_test*percent_pre)
+            N_neg_test_post = math.ceil(N_neg_test*(1-percent_pre))
+            
+            if len(X_pre_pos) < N_pos_train_pre + N_pos_test_pre or len(X_post_pos) < N_pos_train_post + N_pos_test_post  or len(X_pre_neg)  < N_neg_train_pre + N_neg_test_pre or len(X_post_neg) < N_neg_train_post + N_neg_test_post:
+                return pd.DataFrame()
+            
+            #create X and y for fixed training set
+            Train_X = X_pre_pos[:N_pos_train_pre] + X_pre_neg[:N_neg_train_pre] + X_post_pos[:N_pos_train_post] + X_post_neg[:N_neg_train_post]
+            Train_y = np.concatenate((y_pre_pos[:N_pos_train_pre], y_pre_neg[:N_neg_train_pre], y_post_pos[:N_pos_train_post], y_post_neg[:N_neg_train_post]))
+            
+            if split_test == "F22":
+                full_test_X = X_F22
+                codes = get_predicts_binary(s, Train_X, Train_y, full_test_X)
+                #"Response": full_test_X
+                return pd.DataFrame({"Response": full_test_X ,"Uncertainty": codes})
+            elif split_test == "post":
+                if len(X_post_pos) < N_pos_train_post + N_pos_test or len(X_post_neg) < N_neg_train_post + N_neg_test:
+                    return pd.DataFrame()
+                full_test_X = X_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test] + X_post_neg[N_neg_train_post:N_neg_train_post + N_neg_test]
+                full_test_y = np.concatenate((y_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test], y_post_neg[N_neg_train_post:N_neg_train_post + N_neg_test]))
+            else:
+                full_test_X = X_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test_pre] + X_pre_neg[N_neg_train_pre: N_neg_train_pre + N_neg_test_pre] +  X_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test_post] + X_post_neg[N_neg_train_post:N_neg_train_post  + N_neg_test_post]
+                full_test_y = np.concatenate((y_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test_pre], y_pre_neg[N_neg_train_pre: N_neg_train_pre + N_neg_test_pre], y_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test_post], y_post_neg[N_neg_train_post: N_neg_train_post + N_neg_test_post]))
+        elif split_test == "pre" or split_test == "postpre":
+            assert(sum(1 for i in y_pre_pos if i == val)/len(y_pre_pos) == 1.0)
+            assert(sum(1 for i in y_pre_neg if i == val)/len(y_pre_neg) == 0.0)
+            assert(sum(1 for i in y_post_pos if i == val)/len(y_post_pos) == 1.0)
+            assert(sum(1 for i in y_post_neg if i == val)/len(y_post_neg) == 0.0)
+            
+            random.shuffle(X_pre_pos)
+            random.shuffle(X_pre_neg)
+            random.shuffle(X_post_pos)
+            random.shuffle(X_post_neg)
+            
+            print("length X_pre_pos " + str(len(X_pre_pos)))
+            print("length X_pre_neg " + str(len(X_pre_neg)))
+            print("length X_post_pos " + str(len(X_post_pos)))
+            print("length X_post_neg " + str(len(X_post_neg)))
+            
+            
+            percent_pre = 0.2
+            
+            N_pos_train_pre = math.ceil(N_pos_train*percent_pre)
+            N_pos_train_post = math.floor(N_pos_train*(1-percent_pre))
+            N_neg_train_pre = math.ceil(N_neg_train*percent_pre)
+            N_neg_train_post = math.floor(N_neg_train*(1-percent_pre))
+            
+            N_pos_test_pre = math.floor(N_pos_test*percent_pre)
+            N_pos_test_post = math.ceil(N_pos_test*(1-percent_pre))
+            N_neg_test_pre = math.floor(N_neg_test*percent_pre)
+            N_neg_test_post = math.ceil(N_neg_test*(1-percent_pre))
+            
+            if len(X_pre_pos) < N_pos_train_pre + N_pos_test_pre or len(X_post_pos) < N_pos_train_post + N_pos_test_post  or len(X_pre_neg)  < N_neg_train_pre + N_neg_test_pre or len(X_post_neg) < N_neg_train_post + N_neg_test_post:
+                return pd.DataFrame()
+            
+            #create X and y for fixed training set
+            Train_X = X_pre_pos[:N_pos_train_pre] + X_pre_neg[:N_neg_train_pre] + X_post_pos[:N_pos_train_post] + X_post_neg[:N_neg_train_post]
+            Train_y = np.concatenate((y_pre_pos[:N_pos_train_pre], y_pre_neg[:N_neg_train_pre], y_post_pos[:N_pos_train_post], y_post_neg[:N_neg_train_post]))
+            
+            if split_test == "pre":
+                if len(X_pre_pos) < N_pos_train_pre + N_pos_test or len(X_pre_neg) < N_neg_train_pre + N_neg_test:
+                    return pd.DataFrame()
+                full_test_X = X_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test] + X_pre_neg[N_neg_train_pre:N_neg_train_pre + N_neg_test]
+                full_test_y = np.concatenate((y_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test], y_pre_neg[N_neg_train_pre:N_neg_train_pre + N_neg_test]))
+            elif split_test == "postpre":
+                if len(X_pre_pos) < N_pos_train_pre + N_pos_test_pre or len(X_post_pos) < N_pos_train_post + N_pos_test_post  or len(X_pre_neg)  < N_neg_train_pre + N_neg_test_pre or len(X_post_neg) < N_neg_train_post + N_neg_test_post:
+                    return pd.DataFrame()
+                full_test_X = X_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test_pre] + X_pre_neg[N_neg_train_pre: N_neg_train_pre + N_neg_test_pre] +  X_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test_post] + X_post_neg[N_neg_train_post:N_neg_train_post  + N_neg_test_post]
+                full_test_y = np.concatenate((y_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test_pre], y_pre_neg[N_neg_train_pre: N_neg_train_pre + N_neg_test_pre], y_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test_post], y_post_neg[N_neg_train_post: N_neg_train_post + N_neg_test_post]))
+        #if not testing population systematics
+        elif split_test == "all":
+            assert(sum(1 for i in y_pos if i == val)/len(y_pos) == 1.0)
+            assert(sum(1 for i in y_neg if i == val)/len(y_neg) == 0.0)
+            
+            random.shuffle(X_pre_pos)
+            random.shuffle(X_pre_neg)
+            random.shuffle(X_post_pos)
+            random.shuffle(X_post_neg)
+            
+            print("length X_pos " + str(len(X_pos)))
+            print("length X_neg " + str(len(X_neg)))
+            
+            if len(X_pos) < N_pos_train + N_pos_test or len(X_neg) < N_neg_train + N_neg_test:
+                return pd.DataFrame()
+            
+            #create X and y for fixed training set
+            Train_X = X_pos[:N_pos_train] + X_neg[:N_neg_train]
+            Train_y = np.concatenate((y_pos[:N_pos_train],y_neg[:N_neg_train]))
+            
+           
+            #create a test set that is sampled later
+            full_test_X = X_pos[N_pos_train:N_pos_train + N_pos_test] + X_neg[N_neg_train: N_neg_train + N_neg_test]
+            full_test_y = np.concatenate((y_pos[N_pos_train:N_pos_train + N_pos_test], y_neg[N_neg_train: N_neg_train + N_neg_test]))
+         
     
     print("train X " + str(len(Train_X)))
     print("train y " + str(len(Train_y)))
@@ -644,38 +896,21 @@ def get_data(train_dec, test_dec, code, val, s, full_test_max, N_test, opt_trust
     print("test y " + str(len(full_test_y)))
     
     
-    """
-    #create train set size based on input params for percent PRE
-    N_PRE_train = math.floor((N_each-200)*train_dec)
-    N_POST_train = N_each - 200 - N_PRE_train
-    
-    #create X and y for fixed training set
-    Train_X = X_PRE[:N_PRE_train] + X_POST[:N_POST_train]
-    Train_y = np.concatenate((y_PRE[:N_PRE_train],y_POST[:N_POST_train]))
-    
-    #create test set size based on input params
-    N_PRE_test = math.floor(200*test_dec)
-    print(N_PRE_test)
-    N_POST_test = 200 - N_PRE_test
-    print(N_POST_test)
-    #create a test set that is sampled later
-    full_test_X = X_PRE[N_PRE_train:N_PRE_train + N_PRE_test] + X_POST[N_POST_train: N_POST_train + N_POST_test]
-    full_test_y = np.concatenate((y_PRE[N_PRE_train:N_PRE_train + N_PRE_test], y_POST[N_POST_train: N_POST_train + N_POST_test])) 
-    """
-    
+  
     #Run logreg on 100 test set samples (equal test set)
-    #if opt_trustworthy:
     if val == 1:
-        df, df_human, word_weights = get_stats_est_fp_fn_binary(Train_X, Train_y, full_test_X, full_test_y, N_test)
+        df, df_human, word_weights = get_stats_est_fp_fn_binary(Train_X, Train_y, full_test_X, full_test_y, n)
     else:
-        df, df_human, word_weights = get_stats_est_fp_fn_3code(Train_X, Train_y, full_test_X, full_test_y, val, N_test)
+        df, df_human, word_weights = get_stats_est_fp_fn_3code(Train_X, Train_y, full_test_X, full_test_y, val, n)
     if df.empty:
         return pd.DataFrame()
     if sum(1 for i in Train_y if i == val)<2:
         warnings.warn("Less than 2 examples of code in Training set")
-    word_weights.to_csv("word_weights_code" + code + "_train" + str(train_dec) + "seed" + str(s) + ".csv")
-    test_bank.tests_on_inputs(df_s, Train_X, Train_y, full_test_X, full_test_y, N_each, val, opt_trustworthy )
+    #if not word_weights.empty:
+    if isinstance(word_weights, pd.DataFrame):
+        word_weights.to_csv("word_weights_code" + code + "_train" + str(train_dec) + "seed" + str(s) + ".csv")
+    test_bank.tests_on_inputs(df_s, Train_X, Train_y, full_test_X, full_test_y, val, opt_trustworthy )
     #might be able to not output the human dfs because of the tests, write down where that info can be gathered elsewhere
-    test_bank.tests_on_outputs(df["est"], df["human_est"],df["fp"], df["fn"], df_human, test_dec, train_dec, full_test_max)
+    test_bank.tests_on_outputs(df["est"], df["human_est"],df["fp"], df["fn"], df_human, test_dec, train_dec, n_full, n)
     print(df_human)
     return df

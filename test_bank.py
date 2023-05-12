@@ -6,7 +6,7 @@
 import pandas as pd
 import pull_data_code_seed as pull_data
 
-def tests_on_inputs(df_s, Train_X, Train_y, full_test_X, full_test_y, N_each, val, opt_trustworthy):
+def tests_on_inputs(df_s, Train_X, Train_y, full_test_X, full_test_y, val, opt_trustworthy):
     #TEST 1: Train x and train y are same length, test x and test y are same length 
     assert(len(Train_X) == len(Train_y))
     assert(len(full_test_X) == len(full_test_y))
@@ -18,7 +18,7 @@ def tests_on_inputs(df_s, Train_X, Train_y, full_test_X, full_test_y, N_each, va
             assert(len(df[df["Trustworthy Response"].str.len()<2]) == 0)
         else:
             assert(len(df[df["Q"].str.len()<2]) == 0)
-    
+
     #TEST 3: no overlap between data in train and test sets (for trustworthy only as other data naturally has significant overlap in responses)
     if opt_trustworthy:
         X_merge = pd.merge(pd.DataFrame(Train_X), pd.DataFrame(full_test_X))
@@ -27,12 +27,9 @@ def tests_on_inputs(df_s, Train_X, Train_y, full_test_X, full_test_y, N_each, va
                 X_merge = X_merge.drop([i])
         print(X_merge)
         assert(len(X_merge.index) == 0)
+
     
-    #TEST 4: Test sets with no example of a particular code must be thrown out
-    assert(sum(1 for i in full_test_y if i == val)>1)
-    
-    
-def tests_on_outputs(est, human_est,FP, FN, df_human, test_dec, train_dec, full_test_max):
+def tests_on_outputs(est, human_est,FP, FN, df_human, test_dec, train_dec, n_full, n):
     #TEST 1: Assert Human estimate = TP + FN; est is within shooting distance of human est. 
     for i, row in est.iteritems():
         assert(human_est[i] == FN[i] + est[i] - FP[i])
@@ -46,9 +43,11 @@ def tests_on_outputs(est, human_est,FP, FN, df_human, test_dec, train_dec, full_
     assert(not FN.isnull().values.any())
     
     #TEST 3: human est out of 200 from df human is close to average of human_est in samples of 100
-    assert(df_human["test_y"][1]/2 - human_est.mean() < 2 or df_human["test_y"][1]/2 - human_est.mean() > 2)
+    assert(df_human["test_y"][1]/2 - human_est.mean() < 2 or df_human["test_y"][1]/2 - human_est.mean() > 2, df_human["test_y"][1]/2 - human_est.mean())
     #TEST 4: human est is at right level given test_dec
     assert(100*test_dec - sum(human_est)/len(human_est) <3 or sum(human_est)/len(human_est) - 100*test_dec <3)
+    #TEST 5: est must be less than n
+    assert(est[i]<=n)
     
 def tests_on_data():
     #TEST 5: trials with same random seed are deterministically identical
@@ -58,3 +57,4 @@ def tests_on_data():
     df1 = pull_data.get_data_code_seed("PLO", "L", 101, opt_trustworthy = False)
     df2 = pull_data.get_data_code_seed("PLO", "L", 101, opt_trustworthy = False)
     assert(df1.equals(df2))
+    

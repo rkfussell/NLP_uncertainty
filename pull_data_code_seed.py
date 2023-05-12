@@ -12,7 +12,7 @@ print(os.getcwd())
 import get_systematics_data as gsd
 
 
-def get_data_train_test(train_dec,test_dec, s, code, val, full_test_max, N_test, opt_trustworthy):
+def get_data_train_test(train_dec,test_dec, s, code, val, n_full, n, train_size, split_test, opt_trustworthy):
     """
     Driver to run data collection processes in get_systematics_data.py
 
@@ -28,6 +28,14 @@ def get_data_train_test(train_dec,test_dec, s, code, val, full_test_max, N_test,
         column in human-coded spreadsheet with the code of interest (e.g. "Expected" or "PLO")
     val : string or int
         estimate frequency in dataset of this value of code (e.g. "L" or 1)
+    n_full: int
+        number of responses in the full test set 
+    n : int
+        for each test, a sample of size n is pulled from the full test set
+    train_size: int
+        number of responses in the training set
+    split_test : string
+        denotes if data are split based on metadata to test population systematics
     opt_trustworthy : bool
         True if working with Trustworthy data only
 
@@ -37,14 +45,15 @@ def get_data_train_test(train_dec,test_dec, s, code, val, full_test_max, N_test,
         Dataframe of all data from current collection, can be concatenated with other df with other parameters
 
     """
-    df = gsd.get_data(train_dec, test_dec, code, val, s, full_test_max, N_test, opt_trustworthy)
+    df = gsd.get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_test, opt_trustworthy)
+    df["train_size"] = train_size
     df["train_prop"] = train_dec
     df["test_prop"] = test_dec
-    df["full_test_max"] = full_test_max
-    df["N_test"] = N_test
+    df["n_full"] = n_full
+    df["n"] = n
     return df
 
-def get_data_code_seed(code, val, s, opt_trustworthy = True):
+def get_data_code_seed(code, val, s, filename, train_sizes = [600], train_decs = [0.2,0.3,0.4,0.5,0.6,0.7,0.8], test_decs = [0.2,0.3,0.4,0.5,0.6,0.7,0.8], n_fulls = [200], ns = [50,100], split_test = "all", opt_trustworthy = True):
     """
     Drive get_data_train_test() over a specified range of train_dec and test_dec
     
@@ -58,30 +67,48 @@ def get_data_code_seed(code, val, s, opt_trustworthy = True):
         estimate frequency in dataset of this value of code (e.g. "L" or 1 for binary data (trustworthy))
     s : int
          Seed number for current random instance
+    filename: string 
+        phrase all files in this batch will start with
+    train_sizes : list of ints
+        list of train_size values, train_size is number of responses in the training set 
+    train_decs : list of floats
+        list of train_dec values, train_dec is number between 0 and 1 specifying fraction of responses with the code to put in training set
+    test_decs : list of floats
+        list of test_dec values, test_dec is number between 0 and 1 specifying fraction of responses with the code to put in test set
+    n_fulls : list of ints
+        list of n_full values, n_full is number of responses in the full test set 
+    ns : list of ints
+        list of n values, n is a sample of size n pulled from the full test set for each individual test
+    split_test : string
+        denotes if data are split based on metadata to test population systematics
     opt_trustworthy : bool
         True if working with Trustworthy data only
 
     Returns
     -------
     df : Pandas Dataframe
+    
+    train_dec : float
+        Number between 0 and 1 specifying fraction of responses with the code to put in training set.
 
     """
-    #full_test_maxs = [200]
-    #N_tests = [100]
-    train_decs = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]
-    test_decs = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]
-    full_test_maxs = [120,130,140,150,160,170,180,190,200,225,250,275,300,325,350,375,400,425,450,475,500]
-    N_tests = [5,6,7,8,9,10,12,14,16,18,20,25,30,35,40,45,50,55,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200]
-    full_test_maxs = [200]
     df = pd.DataFrame()
-    for train_dec in train_decs:
-        for test_dec in test_decs:
-            for full_test_max in full_test_maxs:
-                for N_test in N_tests:
-                    if N_test < full_test_max:
-                        df_new = get_data_train_test(train_dec, test_dec, s, code, val, full_test_max, N_test, opt_trustworthy)
-                        if not df_new.empty:
-                            df = pd.concat([df, df_new])
-    df.to_csv("BIG_test_vary_" + "code" + code + "val" + str(val) + "seed" + str(s) + "_df.csv")
+    #for gathering labels on uncoded data
+    if split_test == "F22":
+        df = gsd.get_data(0.5, 0.5, code, val, s, 200, 100, train_sizes[0], split_test, opt_trustworthy)
+        df.to_csv("coded_F22_data.csv")
+    else:
+        #for testing on coded test and train
+        for train_size in train_sizes:
+            for train_dec in train_decs:
+                for test_dec in test_decs:
+                    for n_full in n_fulls:
+                        for n in ns:
+                            if n < n_full:
+                                df_new = get_data_train_test(train_dec, test_dec, s, code, val, n_full, n, train_size, split_test, opt_trustworthy)
+                                if not df_new.empty:
+                                    df = pd.concat([df, df_new])
+        #df.to_csv("male_vs_gender-min_" + split_test + "_code" + code + "val" + str(val) + "seed" + str(s) + "_df.csv")
+        df.to_csv(filename + split_test + "_code" + code + "val" + str(val) + "seed" + str(s) + "_df.csv")
     return df
 
