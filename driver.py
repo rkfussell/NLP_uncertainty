@@ -24,7 +24,7 @@ import pull_data_code_seed as pull_data
 #    pull_data.get_data_code_seed("Uncertainty", 1, i, "Apply_Method_", train_sizes = [400], train_decs = [0.5], test_decs = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0], n_fulls = [150], ns = [100], split_test = "post", opt_trustworthy = True)
 #    pull_data.get_data_code_seed("Uncertainty", 1, i, "Apply_Method_", train_sizes = [400], train_decs = [0.5], test_decs = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0], n_fulls = [150], ns = [100], split_test = "postpre", opt_trustworthy = True)
 #    #pull_data.get_data_code_seed("Uncertainty", 1, i, "code_F22", train_sizes = [400], train_decs = [0.5], test_decs = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0], n_fulls = [150], ns = [100],split_test = "F22", opt_trustworthy = True)
-#pull_data.get_data_code_seed("Uncertainty", 1, 10, "Apply_Method_", train_sizes = [400], train_decs = [0.5], test_decs = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0], n_fulls = [150], ns = [100], split_test = "post", opt_trustworthy = True)
+pull_data.get_data_code_seed("Uncertainty", 1, 10, "Apply_Method_", train_sizes = [400], train_decs = [0.5], test_decs = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0], n_fulls = [150], ns = [100], split_test = "post", opt_trustworthy = True)
 
 pull_data.get_data_code_seed("Uncertainty", 1, 4, "code_F22", train_sizes = [400], train_decs = [0.5], test_decs = [0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0], n_fulls = [150], ns = [100],split_test = "F22", opt_trustworthy = True)
 

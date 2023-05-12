@@ -15,7 +15,6 @@ import statistics
 import contractions
 import nltk
 
-
 from sklearn import model_selection, naive_bayes, svm, linear_model, ensemble, neighbors
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import precision_score
@@ -162,9 +161,9 @@ def logreg(s,tokenizer, Xtrain, Xtest, Train_y, Test_y):
         for num in sorted_keys[-20:]:
             words.append(words_dict[num])
             coefs.append(coefs_dict[num])
-        print(words)
-        print(coefs)
-        print(Log.predict_proba(Xtest))
+        #print(words)
+        #print(coefs)
+        #print(Log.predict_proba(Xtest))
         
     return confusion_matrix(Test_y, predictions_Log)
 def get_predicts_binary(s, train_x,train_y, test_x):
@@ -221,8 +220,8 @@ def get_predicts_binary(s, train_x,train_y, test_x):
     for num in sorted_keys[-20:]:
         words.append(words_dict[num])
         coefs.append(coefs_dict[num])
-    print(words)
-    print(coefs)
+    #print(words)
+    #print(coefs)
     return predictions_Log
     
     
