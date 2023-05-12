@@ -113,7 +113,7 @@ def cohens_kappa(tp,fp,fn,tn):
     else:
         return -1
 
-def logreg1(s,tokenizer, Xtrain, Xtest, Train_y, Test_y):
+def logreg(s,tokenizer, Xtrain, Xtest, Train_y, Test_y):
     """
     Run logistic regression machine learning algorithm 
     Parameters
@@ -166,7 +166,7 @@ def logreg1(s,tokenizer, Xtrain, Xtest, Train_y, Test_y):
         print(coefs)
         print(Log.predict_proba(Xtest))
         
-    return confusion_matrix(Test_y, predictions_Log), words, coefs, Log.predict_proba(Xtest)
+    return confusion_matrix(Test_y, predictions_Log)
 def get_predicts_binary(s, train_x,train_y, test_x):
     """
     Run the logistic regression for many trials, store and return all relevant data (e.g. computer est, human est, rate of false negatives and rate of false positives)
@@ -285,17 +285,14 @@ def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, n):
 
         Te_X = tok.texts_to_matrix(Te_X, mode="binary")
         #run the logistic regression, store confusion matrix as mat
-        mat, words, coefs, probas = logreg1(s,tok, Tr_X, Te_X, train_y, Te_y)
+        mat = logreg(s,tok, Tr_X, Te_X, train_y, Te_y)
         if len(mat[0])<2:
             print("mat[0]<2")
             if sum(Te_y)== 0.0:
                 mat = np.array([[n,0],[0,0]])
             else:
                 mat = np.array([[0,0],[0,n]])
-        if len(words) >0:
-            word_weights = pd.DataFrame({'words' : words, 'coefficients' : coefs})
-        else:
-            word_weights = None
+
         #extract useful measures from mat
         est.append(mat[1][1] + mat[0][1])
         if sum(Te_y)/len(Te_y) == 0.0 or sum(Te_y)/len(Te_y) == 1.0:
@@ -323,7 +320,7 @@ def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, n):
             "train_y": pd.DataFrame(train_y).value_counts(sort = False),
             "test_y": pd.DataFrame(test_y).value_counts(sort = False)})
     
-    return df, df_human, word_weights
+    return df, df_human
 
 def get_stats_est_fp_fn_3code(train_x, train_y, test_x, test_y, val, n):
     """
@@ -384,8 +381,7 @@ def get_stats_est_fp_fn_3code(train_x, train_y, test_x, test_y, val, n):
                 return pd.DataFrame(), pd.DataFrame()
 
         Te_X = tok.texts_to_matrix(Te_X, mode="binary")
-        mat, words, coefs, probas = logreg1(s,tok, Tr_X, Te_X, train_y, Te_y)
-        word_weights = pd.DataFrame({'words' : words, 'coefficients' : coefs})
+        mat = logreg(s,tok, Tr_X, Te_X, train_y, Te_y)
         #list of 3 codes in alphabetical order
         if val == vals[0]:
             est.append(mat[0][0] + mat[1][0] + mat[2][0])
@@ -416,7 +412,7 @@ def get_stats_est_fp_fn_3code(train_x, train_y, test_x, test_y, val, n):
         "train_y": pd.DataFrame(train_y).value_counts(sort = False),
         "test_y": pd.DataFrame(test_y).value_counts(sort = False)})
     
-    return df, df_human, word_weights
+    return df, df_human
 def trustworthy_process( s, code):
     """
     Pre-process trustworthy data, break into data subsets PRE and POST
@@ -899,16 +895,14 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
   
     #Run logreg on 100 test set samples (equal test set)
     if val == 1:
-        df, df_human, word_weights = get_stats_est_fp_fn_binary(Train_X, Train_y, full_test_X, full_test_y, n)
+        df, df_human = get_stats_est_fp_fn_binary(Train_X, Train_y, full_test_X, full_test_y, n)
     else:
-        df, df_human, word_weights = get_stats_est_fp_fn_3code(Train_X, Train_y, full_test_X, full_test_y, val, n)
+        df, df_human = get_stats_est_fp_fn_3code(Train_X, Train_y, full_test_X, full_test_y, val, n)
     if df.empty:
         return pd.DataFrame()
     if sum(1 for i in Train_y if i == val)<2:
         warnings.warn("Less than 2 examples of code in Training set")
-    #if not word_weights.empty:
-    if isinstance(word_weights, pd.DataFrame):
-        word_weights.to_csv("word_weights_code" + code + "_train" + str(train_dec) + "seed" + str(s) + ".csv")
+    
     test_bank.tests_on_inputs(df_s, Train_X, Train_y, full_test_X, full_test_y, val, opt_trustworthy )
     #might be able to not output the human dfs because of the tests, write down where that info can be gathered elsewhere
     test_bank.tests_on_outputs(df["est"], df["human_est"],df["fp"], df["fn"], df_human, test_dec, train_dec, n_full, n)
