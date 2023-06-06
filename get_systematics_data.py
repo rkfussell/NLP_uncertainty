@@ -10,15 +10,11 @@ import random
 import test_bank
 import warnings
 import math
-import statistics
 
 import contractions
 import nltk
 
 from sklearn import model_selection, naive_bayes, svm, linear_model, ensemble, neighbors
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import precision_score
-from sklearn.metrics import recall_score
 from sklearn.metrics import confusion_matrix
 from keras.preprocessing.text import Tokenizer
 
@@ -59,7 +55,6 @@ def preprocess_text(line):
 
     """
     token = nltk.tokenize.RegexpTokenizer(r"\w+")
-    stopWords = nltk.corpus.stopwords.words("english")
     lemmatizer = nltk.stem.WordNetLemmatizer()
     
     line = line.lower().split(" ")
@@ -147,22 +142,21 @@ def logreg(s,tokenizer, Xtrain, Xtest, Train_y, Test_y):
     if True:
         #Log.coef_[2][i] for principles, Log.coef_[0][i] for limitations
         coefs_dict = {i: np.exp(Log.coef_[0][i]) for i in range(len(Log.coef_[0]))}
-        sorted_dict = {}
         sorted_keys = sorted(coefs_dict, key=coefs_dict.get) 
         words_dict = dict((v,k) for k,v in tokenizer.word_index.items())
         #for w in sorted_keys:
         #    sorted_dict[w] = coefs_dict[w]
         #print(sorted_dict)
         #print("\nNegative:")
-        for num in sorted_keys[:10]:
+        for num in sorted_keys[:20]:
             words.append(words_dict[num])
             coefs.append(coefs_dict[num])
         #print("\nPositive:")
         for num in sorted_keys[-20:]:
             words.append(words_dict[num])
             coefs.append(coefs_dict[num])
-        #print(words)
-        #print(coefs)
+        print(words)
+        print(coefs)
         #print(Log.predict_proba(Xtest))
         
     return confusion_matrix(Test_y, predictions_Log)
@@ -206,7 +200,6 @@ def get_predicts_binary(s, train_x,train_y, test_x):
     coefs = []
     #Log.coef_[2][i] for principles, Log.coef_[0][i] for limitations
     coefs_dict = {i: np.exp(Log.coef_[0][i]) for i in range(len(Log.coef_[0]))}
-    sorted_dict = {}
     sorted_keys = sorted(coefs_dict, key=coefs_dict.get) 
     words_dict = dict((v,k) for k,v in tok.word_index.items())
     #for w in sorted_keys:
@@ -220,8 +213,8 @@ def get_predicts_binary(s, train_x,train_y, test_x):
     for num in sorted_keys[-20:]:
         words.append(words_dict[num])
         coefs.append(coefs_dict[num])
-    #print(words)
-    #print(coefs)
+    print(words)
+    print(coefs)
     return predictions_Log
     
     
@@ -633,15 +626,6 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
     elif opt_trustworthy:
         df_s, N_each, X_s, y_s =  trustworthy_process(s, code)
         #train_size = 600
-    #elif opt_trustworthy and (split_test == "pre" or split_test == "post"):
-    #    df_s, N_each, X_s, y_s =  trustworthy_process(s, code)
-    #    df_s_sys = (df_s[0],)
-    #    df_s = (df_s[1],)
-    #    X_s_sys = (X_s[0],)
-    #    X_s = (X_s[1],)
-    #    y_s_sys = (y_s[0],)
-    #    y_s = (y_s[1],)
-    #    #train_size = 550 
     elif split_test == "upper" or split_test == "intro":
         df_s, N_PM, X_s, y_s = sources_process(s, code, val, systematic = "intro")
         df_s_sys, N_PM_sys, X_s_sys, y_s_sys = sources_process(s, code, val, systematic = "upper")
@@ -668,7 +652,7 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
     print("N_pos_train " + str(N_pos_train))
     print("N_neg_train " + str(N_neg_train))
                 
-    if opt_trustworthy  and code == "Uncertainty" or split_test == "pre" or split_test == "postpre":
+    if opt_trustworthy and code == "Uncertainty" or split_test == "pre" or split_test == "postpre":
         X_pre_pos = []
         X_pre_neg = []
         y_pre_pos = []
@@ -705,9 +689,8 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
     X_neg = []
     y_pos = []
     y_neg = []
-    #sub denotes the subgroups of a dataset, e.g. pre and post for trustworthy, experiment type for sources
     
-
+    #sub denotes the subgroups of a dataset, e.g. pre and post for trustworthy, experiment type for sources
     for sub_idx in range(len(X_s)):
         for idx, condition_met in enumerate(y_s[sub_idx] == val):
             if condition_met:
@@ -718,7 +701,7 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
                 y_neg.append(y_s[sub_idx][idx])   
 
 
-    #add code to evenly split O and P in the case of limitations
+    #evenly split O and P in the case of limitations code from Sources coding scheme
     if val == "L":
         X_O = []
         y_O = []
@@ -864,10 +847,8 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
             assert(sum(1 for i in y_pos if i == val)/len(y_pos) == 1.0)
             assert(sum(1 for i in y_neg if i == val)/len(y_neg) == 0.0)
             
-            random.shuffle(X_pre_pos)
-            random.shuffle(X_pre_neg)
-            random.shuffle(X_post_pos)
-            random.shuffle(X_post_neg)
+            random.shuffle(X_pos)
+            random.shuffle(X_neg)
             
             print("length X_pos " + str(len(X_pos)))
             print("length X_neg " + str(len(X_neg)))
