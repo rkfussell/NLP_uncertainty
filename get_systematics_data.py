@@ -139,7 +139,7 @@ def logreg(s,tokenizer, Xtrain, Xtest, Train_y, Test_y):
     words = []
     coefs = []
     #if s == 100:
-    if True:
+    if False:
         #Log.coef_[2][i] for principles, Log.coef_[0][i] for limitations
         coefs_dict = {i: np.exp(Log.coef_[0][i]) for i in range(len(Log.coef_[0]))}
         sorted_keys = sorted(coefs_dict, key=coefs_dict.get) 
@@ -218,7 +218,7 @@ def get_predicts_binary(s, train_x,train_y, test_x):
     return predictions_Log
     
     
-def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, n):
+def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, n, num_samples):
     """
     Run the logistic regression for many trials, store and return all relevant data (e.g. computer est, human est, rate of false negatives and rate of false positives)
     
@@ -251,7 +251,7 @@ def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, n):
     human_est = []
     kappa = []
     #pull 100 samples from the full test set
-    for s in range(100):
+    for s in range(num_samples):
         set_random_seed(seed = s)
         tok = Tokenizer(lower = False)
         #tok.fit_on_texts(Train_X)
@@ -405,7 +405,7 @@ def get_stats_est_fp_fn_3code(train_x, train_y, test_x, test_y, val, n):
         "test_y": pd.DataFrame(test_y).value_counts(sort = False)})
     
     return df, df_human
-def trustworthy_process( s, code):
+def trustworthy_process( s, code, split_test):
     """
     Pre-process trustworthy data, break into data subsets PRE and POST
 
@@ -430,7 +430,7 @@ def trustworthy_process( s, code):
     #read in the data
     df_full = pd.read_csv(r'trustworthy_dat.csv')
     #create equal sized, shuffled pre and post data frames. these are fixed and do not depend on seed.
-    if code == "Uncertainty":
+    if split_test == "F22":
         df  = df_full[df_full["Semester"] != "F2022"]
         F22 = df_full[df_full["Semester"] == "F2022"]
     else:
@@ -465,9 +465,13 @@ def trustworthy_process( s, code):
         X_POST.append(preprocess_text(response))
     y_POST = np.array(POST[code].tolist())
     X_F22 = []
-    if code == "Uncertainty":
-        for response in F22["Trustworthy Response"].tolist():
-            X_F22.append(preprocess_text(response))
+#    if split_test == "F22":
+#        for response in F22["Trustworthy Response"].tolist():
+#            X_F22.append((preprocess_text(response), F22["ResponseID"])) 
+#        return (PRE, POST), N_each, (X_PRE, X_POST), (y_PRE, y_POST), X_F22
+    if split_test == "F22":
+        for index, row in F22.iterrows():
+            X_F22.append((preprocess_text(row["Trustworthy Response"]), row["ResponseID"]))
         return (PRE, POST), N_each, (X_PRE, X_POST), (y_PRE, y_POST), X_F22
     return (PRE, POST), N_each, (X_PRE, X_POST), (y_PRE, y_POST)
 
@@ -583,7 +587,7 @@ def sources_process( s, code, val , systematic = "all"):
     elif systematic == "upper" or systematic == "intro":
         return (PMs,), N_each, (X_PMs,), (y_PMs,)
 
-def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_test = "all", opt_trustworthy = False):
+def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_test = "all", opt_trustworthy = False, num_samples = 100):
     """
     code is a string, the category of response in human coded data
     N_each is the number of responses after cleaning 
@@ -620,11 +624,11 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
 
     """
 
-    if opt_trustworthy and code == "Uncertainty":
-        df_s, N_each, X_s, y_s, X_F22 =  trustworthy_process(s, code)
+    if opt_trustworthy and split_test == "F22":
+        df_s, N_each, X_s, y_s, X_F22 =  trustworthy_process(s, code, split_test)
         #train_size = 600
     elif opt_trustworthy:
-        df_s, N_each, X_s, y_s =  trustworthy_process(s, code)
+        df_s, N_each, X_s, y_s =  trustworthy_process(s, code, split_test)
         #train_size = 600
     elif split_test == "upper" or split_test == "intro":
         df_s, N_PM, X_s, y_s = sources_process(s, code, val, systematic = "intro")
@@ -652,7 +656,8 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
     print("N_pos_train " + str(N_pos_train))
     print("N_neg_train " + str(N_neg_train))
                 
-    if opt_trustworthy and code == "Uncertainty" or split_test == "pre" or split_test == "postpre":
+    if split_test == "pre" or split_test == "postpre":
+        #create the data structures
         X_pre_pos = []
         X_pre_neg = []
         y_pre_pos = []
@@ -683,86 +688,131 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
             elif not condition_met:
                 X_post_neg.append(X_post[idx])
                 y_post_neg.append(y_post[idx])
-                    
-      
-    X_pos = []
-    X_neg = []
-    y_pos = []
-    y_neg = []
-    
-    #sub denotes the subgroups of a dataset, e.g. pre and post for trustworthy, experiment type for sources
-    for sub_idx in range(len(X_s)):
-        for idx, condition_met in enumerate(y_s[sub_idx] == val):
-            if condition_met:
-                X_pos.append(X_s[sub_idx][idx])
-                y_pos.append(y_s[sub_idx][idx])
-            elif not condition_met:
-                X_neg.append(X_s[sub_idx][idx])
-                y_neg.append(y_s[sub_idx][idx])   
-
-
-    #evenly split O and P in the case of limitations code from Sources coding scheme
-    if val == "L":
-        X_O = []
-        y_O = []
-        X_P = []
-        y_P = []
-        for idx in range(len(y_neg)):
-            if y_neg[idx] == "O":
-                X_O.append(X_neg[idx])
-                y_O.append(y_neg[idx])
-            elif y_neg[idx] == "P":
-                X_P.append(X_neg[idx])
-                y_P.append(y_neg[idx])
-            else:
-                assert(y_neg[idx] == "O" or y_neg[idx] == "P")
+                
+        #check validity of data structures
+        assert(sum(1 for i in y_pre_pos if i == val)/len(y_pre_pos) == 1.0)
+        assert(sum(1 for i in y_pre_neg if i == val)/len(y_pre_neg) == 0.0)
+        assert(sum(1 for i in y_post_pos if i == val)/len(y_post_pos) == 1.0)
+        assert(sum(1 for i in y_post_neg if i == val)/len(y_post_neg) == 0.0)
         
-        assert(sum(1 for i in y_O if i == "O")/len(y_O) == 1.0)
-        assert(sum(1 for i in y_P if i == "P")/len(y_P) == 1.0)
+        random.shuffle(X_pre_pos)
+        random.shuffle(X_pre_neg)
+        random.shuffle(X_post_pos)
+        random.shuffle(X_post_neg)
         
-        random.shuffle(X_pos)
-        random.shuffle(X_O)
-        random.shuffle(X_P)
         
-        print("length X_pos " + str(len(X_pos)))
-        print("length X_O " + str(len(X_O)))
-        print("length X_O " + str(len(X_O)))
+        print("length X_pre_pos " + str(len(X_pre_pos)))
+        print("length X_pre_neg " + str(len(X_pre_neg)))
+        print("length X_post_pos " + str(len(X_post_pos)))
+        print("length X_post_neg " + str(len(X_post_neg)))
         
-        lesser = len(X_O) if len(X_O) < len(X_P) else len(X_P)
-        if len(X_pos) < N_pos_train + N_pos_test or lesser*2 < N_neg_train + N_neg_test:
+        #create training and test sets
+        percent_pre = 0.2
+        
+        N_pos_train_pre = math.ceil(N_pos_train*percent_pre)
+        N_pos_train_post = math.floor(N_pos_train*(1-percent_pre))
+        N_neg_train_pre = math.ceil(N_neg_train*percent_pre)
+        N_neg_train_post = math.floor(N_neg_train*(1-percent_pre))
+        
+        N_pos_test_pre = math.floor(N_pos_test*percent_pre)
+        N_pos_test_post = math.ceil(N_pos_test*(1-percent_pre))
+        N_neg_test_pre = math.floor(N_neg_test*percent_pre)
+        N_neg_test_post = math.ceil(N_neg_test*(1-percent_pre))
+        
+        if len(X_pre_pos) < N_pos_train_pre + N_pos_test_pre or len(X_post_pos) < N_pos_train_post + N_pos_test_post  or len(X_pre_neg)  < N_neg_train_pre + N_neg_test_pre or len(X_post_neg) < N_neg_train_post + N_neg_test_post:
             return pd.DataFrame()
         
-        N_neg_train_O = int(math.ceil(N_neg_train/2))
-        N_neg_train_P = int(math.floor(N_neg_train/2))
-        N_neg_test_O = int(math.ceil(N_neg_test/2))
-        N_neg_test_P = int(math.floor(N_neg_test/2))
+        #create X and y for fixed training set
+        Train_X = X_pre_pos[:N_pos_train_pre] + X_pre_neg[:N_neg_train_pre] + X_post_pos[:N_pos_train_post] + X_post_neg[:N_neg_train_post]
+        Train_y = np.concatenate((y_pre_pos[:N_pos_train_pre], y_pre_neg[:N_neg_train_pre], y_post_pos[:N_pos_train_post], y_post_neg[:N_neg_train_post]))
+        
+        if split_test == "pre":
+            if len(X_pre_pos) < N_pos_train_pre + N_pos_test or len(X_pre_neg) < N_neg_train_pre + N_neg_test:
+                return pd.DataFrame()
+            full_test_X = X_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test] + X_pre_neg[N_neg_train_pre:N_neg_train_pre + N_neg_test]
+            full_test_y = np.concatenate((y_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test], y_pre_neg[N_neg_train_pre:N_neg_train_pre + N_neg_test]))
+        elif split_test == "postpre":
+            if len(X_pre_pos) < N_pos_train_pre + N_pos_test_pre or len(X_post_pos) < N_pos_train_post + N_pos_test_post  or len(X_pre_neg)  < N_neg_train_pre + N_neg_test_pre or len(X_post_neg) < N_neg_train_post + N_neg_test_post:
+                return pd.DataFrame()
+            full_test_X = X_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test_pre] + X_pre_neg[N_neg_train_pre: N_neg_train_pre + N_neg_test_pre] +  X_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test_post] + X_post_neg[N_neg_train_post:N_neg_train_post  + N_neg_test_post]
+            full_test_y = np.concatenate((y_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test_pre], y_pre_neg[N_neg_train_pre: N_neg_train_pre + N_neg_test_pre], y_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test_post], y_post_neg[N_neg_train_post: N_neg_train_post + N_neg_test_post]))
+    
+    elif split_test == "all" or split_test == "F22":
+    #if not testing population systematics
+        X_pos = []
+        X_neg = []
+        y_pos = []
+        y_neg = []
+    
+    
+        #sub denotes the subgroups of a dataset, e.g. pre and post for trustworthy, experiment type for sources
+        for sub_idx in range(len(X_s)):
+            for idx, condition_met in enumerate(y_s[sub_idx] == val):
+                if condition_met:
+                    X_pos.append(X_s[sub_idx][idx])
+                    y_pos.append(y_s[sub_idx][idx])
+                elif not condition_met:
+                    X_neg.append(X_s[sub_idx][idx])
+                    y_neg.append(y_s[sub_idx][idx])   
+        assert(sum(1 for i in y_pos if i == val)/len(y_pos) == 1.0)
+        assert(sum(1 for i in y_neg if i == val)/len(y_neg) == 0.0)
+        
+        random.shuffle(X_pos)
+        random.shuffle(X_neg)
+        
+        print("length X_pos " + str(len(X_pos)))
+        print("length X_neg " + str(len(X_neg)))
+        
+        if len(X_pos) < N_pos_train + N_pos_test or len(X_neg) < N_neg_train + N_neg_test:
+            return pd.DataFrame()
+        
+        
         
         #create X and y for fixed training set
-        Train_X = X_pos[:N_pos_train] + X_O[:N_neg_train_O] + X_P[:N_neg_train_P]
-        Train_y = np.concatenate((y_pos[:N_pos_train],y_O[:N_neg_train_O], y_P[:N_neg_train_P]))
+        Train_X = X_pos[:N_pos_train] + X_neg[:N_neg_train]
+        Train_y = np.concatenate((y_pos[:N_pos_train],y_neg[:N_neg_train]))
         
-        #create a test set that is sampled later
-        full_test_X = X_pos[N_pos_train:N_pos_train + N_pos_test] + X_O[N_neg_train_O: N_neg_train_O + N_neg_test_O] + X_P[N_neg_train_P: N_neg_train_P + N_neg_test_P]
-        full_test_y = np.concatenate((y_pos[N_pos_train:N_pos_train + N_pos_test], y_O[N_neg_train_O: N_neg_train_O + N_neg_test_O], y_P[N_neg_train_P: N_neg_train_P + N_neg_test_P]))
-        
+        if split_test == "F22":
+            full_test_X = []
+            corresponding_responseID = []
+            for row in X_F22:
+                full_test_X.append(row[0])
+                corresponding_responseID.append(row[1])
+            responseID = X_F22
+            codes = get_predicts_binary(s, Train_X, Train_y, full_test_X)
+            #"Response": full_test_X
+            return pd.DataFrame({"Response": full_test_X , code: codes, "ResponseID": corresponding_responseID})
+           
+        full_test_X = X_pos[N_pos_train:N_pos_train + N_pos_test] + X_neg[N_neg_train: N_neg_train + N_neg_test]
+        full_test_y = np.concatenate((y_pos[N_pos_train:N_pos_train + N_pos_test], y_neg[N_neg_train: N_neg_train + N_neg_test]))
+         
+    
+    #now that train and test sets are made, print their size
+    print("train X " + str(len(Train_X)))
+    print("train y " + str(len(Train_y)))
+    print("test X " + str(len(full_test_X)))
+    print("test y " + str(len(full_test_y)))
+    
+    
+    #Run logreg on 100 test set samples (equal test set)
+    if val == 1:
+        df, df_human = get_stats_est_fp_fn_binary(Train_X, Train_y, full_test_X, full_test_y, n, num_samples)
     else:
-        #handle the pre/post separately in the uncertainty code case
-        if opt_trustworthy and code == "Uncertainty":
-            assert(sum(1 for i in y_pre_pos if i == val)/len(y_pre_pos) == 1.0)
-            assert(sum(1 for i in y_pre_neg if i == val)/len(y_pre_neg) == 0.0)
-            assert(sum(1 for i in y_post_pos if i == val)/len(y_post_pos) == 1.0)
-            assert(sum(1 for i in y_post_neg if i == val)/len(y_post_neg) == 0.0)
-            
-            random.shuffle(X_pre_pos)
-            random.shuffle(X_pre_neg)
-            random.shuffle(X_post_pos)
-            random.shuffle(X_post_neg)
-            
-            print("length X_pre_pos " + str(len(X_pre_pos)))
-            print("length X_pre_neg " + str(len(X_pre_neg)))
-            print("length X_post_pos " + str(len(X_post_pos)))
-            print("length X_post_neg " + str(len(X_post_neg)))
-            
+        df, df_human = get_stats_est_fp_fn_3code(Train_X, Train_y, full_test_X, full_test_y, val, n)
+    if df.empty:
+        return pd.DataFrame()
+    if sum(1 for i in Train_y if i == val)<2:
+        warnings.warn("Less than 2 examples of code in Training set")
+    
+    test_bank.tests_on_inputs(df_s, Train_X, Train_y, full_test_X, full_test_y, val, opt_trustworthy )
+    #might be able to not output the human dfs because of the tests, write down where that info can be gathered elsewhere
+    test_bank.tests_on_outputs(df["est"], df["human_est"],df["fp"], df["fn"], df_human, test_dec, train_dec, n_full, n)
+    print(df_human)
+    return df
+
+
+"""
+    else:
             
             percent_pre = 0.5
             
@@ -796,95 +846,5 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
             else:
                 full_test_X = X_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test_pre] + X_pre_neg[N_neg_train_pre: N_neg_train_pre + N_neg_test_pre] +  X_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test_post] + X_post_neg[N_neg_train_post:N_neg_train_post  + N_neg_test_post]
                 full_test_y = np.concatenate((y_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test_pre], y_pre_neg[N_neg_train_pre: N_neg_train_pre + N_neg_test_pre], y_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test_post], y_post_neg[N_neg_train_post: N_neg_train_post + N_neg_test_post]))
-        elif split_test == "pre" or split_test == "postpre":
-            assert(sum(1 for i in y_pre_pos if i == val)/len(y_pre_pos) == 1.0)
-            assert(sum(1 for i in y_pre_neg if i == val)/len(y_pre_neg) == 0.0)
-            assert(sum(1 for i in y_post_pos if i == val)/len(y_post_pos) == 1.0)
-            assert(sum(1 for i in y_post_neg if i == val)/len(y_post_neg) == 0.0)
             
-            random.shuffle(X_pre_pos)
-            random.shuffle(X_pre_neg)
-            random.shuffle(X_post_pos)
-            random.shuffle(X_post_neg)
-            
-            print("length X_pre_pos " + str(len(X_pre_pos)))
-            print("length X_pre_neg " + str(len(X_pre_neg)))
-            print("length X_post_pos " + str(len(X_post_pos)))
-            print("length X_post_neg " + str(len(X_post_neg)))
-            
-            
-            percent_pre = 0.2
-            
-            N_pos_train_pre = math.ceil(N_pos_train*percent_pre)
-            N_pos_train_post = math.floor(N_pos_train*(1-percent_pre))
-            N_neg_train_pre = math.ceil(N_neg_train*percent_pre)
-            N_neg_train_post = math.floor(N_neg_train*(1-percent_pre))
-            
-            N_pos_test_pre = math.floor(N_pos_test*percent_pre)
-            N_pos_test_post = math.ceil(N_pos_test*(1-percent_pre))
-            N_neg_test_pre = math.floor(N_neg_test*percent_pre)
-            N_neg_test_post = math.ceil(N_neg_test*(1-percent_pre))
-            
-            if len(X_pre_pos) < N_pos_train_pre + N_pos_test_pre or len(X_post_pos) < N_pos_train_post + N_pos_test_post  or len(X_pre_neg)  < N_neg_train_pre + N_neg_test_pre or len(X_post_neg) < N_neg_train_post + N_neg_test_post:
-                return pd.DataFrame()
-            
-            #create X and y for fixed training set
-            Train_X = X_pre_pos[:N_pos_train_pre] + X_pre_neg[:N_neg_train_pre] + X_post_pos[:N_pos_train_post] + X_post_neg[:N_neg_train_post]
-            Train_y = np.concatenate((y_pre_pos[:N_pos_train_pre], y_pre_neg[:N_neg_train_pre], y_post_pos[:N_pos_train_post], y_post_neg[:N_neg_train_post]))
-            
-            if split_test == "pre":
-                if len(X_pre_pos) < N_pos_train_pre + N_pos_test or len(X_pre_neg) < N_neg_train_pre + N_neg_test:
-                    return pd.DataFrame()
-                full_test_X = X_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test] + X_pre_neg[N_neg_train_pre:N_neg_train_pre + N_neg_test]
-                full_test_y = np.concatenate((y_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test], y_pre_neg[N_neg_train_pre:N_neg_train_pre + N_neg_test]))
-            elif split_test == "postpre":
-                if len(X_pre_pos) < N_pos_train_pre + N_pos_test_pre or len(X_post_pos) < N_pos_train_post + N_pos_test_post  or len(X_pre_neg)  < N_neg_train_pre + N_neg_test_pre or len(X_post_neg) < N_neg_train_post + N_neg_test_post:
-                    return pd.DataFrame()
-                full_test_X = X_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test_pre] + X_pre_neg[N_neg_train_pre: N_neg_train_pre + N_neg_test_pre] +  X_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test_post] + X_post_neg[N_neg_train_post:N_neg_train_post  + N_neg_test_post]
-                full_test_y = np.concatenate((y_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test_pre], y_pre_neg[N_neg_train_pre: N_neg_train_pre + N_neg_test_pre], y_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test_post], y_post_neg[N_neg_train_post: N_neg_train_post + N_neg_test_post]))
-        #if not testing population systematics
-        elif split_test == "all":
-            assert(sum(1 for i in y_pos if i == val)/len(y_pos) == 1.0)
-            assert(sum(1 for i in y_neg if i == val)/len(y_neg) == 0.0)
-            
-            random.shuffle(X_pos)
-            random.shuffle(X_neg)
-            
-            print("length X_pos " + str(len(X_pos)))
-            print("length X_neg " + str(len(X_neg)))
-            
-            if len(X_pos) < N_pos_train + N_pos_test or len(X_neg) < N_neg_train + N_neg_test:
-                return pd.DataFrame()
-            
-            #create X and y for fixed training set
-            Train_X = X_pos[:N_pos_train] + X_neg[:N_neg_train]
-            Train_y = np.concatenate((y_pos[:N_pos_train],y_neg[:N_neg_train]))
-            
-           
-            #create a test set that is sampled later
-            full_test_X = X_pos[N_pos_train:N_pos_train + N_pos_test] + X_neg[N_neg_train: N_neg_train + N_neg_test]
-            full_test_y = np.concatenate((y_pos[N_pos_train:N_pos_train + N_pos_test], y_neg[N_neg_train: N_neg_train + N_neg_test]))
-         
-    
-    print("train X " + str(len(Train_X)))
-    print("train y " + str(len(Train_y)))
-    print("test X " + str(len(full_test_X)))
-    print("test y " + str(len(full_test_y)))
-    
-    
-  
-    #Run logreg on 100 test set samples (equal test set)
-    if val == 1:
-        df, df_human = get_stats_est_fp_fn_binary(Train_X, Train_y, full_test_X, full_test_y, n)
-    else:
-        df, df_human = get_stats_est_fp_fn_3code(Train_X, Train_y, full_test_X, full_test_y, val, n)
-    if df.empty:
-        return pd.DataFrame()
-    if sum(1 for i in Train_y if i == val)<2:
-        warnings.warn("Less than 2 examples of code in Training set")
-    
-    test_bank.tests_on_inputs(df_s, Train_X, Train_y, full_test_X, full_test_y, val, opt_trustworthy )
-    #might be able to not output the human dfs because of the tests, write down where that info can be gathered elsewhere
-    test_bank.tests_on_outputs(df["est"], df["human_est"],df["fp"], df["fn"], df_human, test_dec, train_dec, n_full, n)
-    print(df_human)
-    return df
+ """   
