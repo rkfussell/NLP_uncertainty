@@ -23,7 +23,7 @@ def tests_on_inputs(df_s, Train_X, Train_y, full_test_X, full_test_y, val, opt_t
     if opt_trustworthy:
         X_merge = pd.merge(pd.DataFrame(Train_X), pd.DataFrame(full_test_X))
         for i in X_merge.index:
-            if (X_merge[0][i] == "statistical" and X_merge[1][i] == "analysis") or (X_merge[0][i] == "i" and X_merge[3][i] == "know") or (X_merge[0][i] == "the" or X_merge[0][i] == "low" and X_merge[1][i] == "uncertainty"):
+            if (X_merge[0][i] == "statistical" and X_merge[1][i] == "analysis") or (X_merge[0][i] == "i" and X_merge[3][i] == "know") or (X_merge[0][i] == "the" or X_merge[0][i] == "low" and X_merge[1][i] == "uncertainty" or X_merge[0][i] == "chi" and X_merge[1][i] == "squared"):
                 X_merge = X_merge.drop([i])
         print(X_merge)
         assert(len(X_merge.index) == 0)

@@ -430,7 +430,7 @@ def trustworthy_process( s, code, split_test):
     #read in the data
     df_full = pd.read_csv(r'trustworthy_dat.csv')
     #create equal sized, shuffled pre and post data frames. these are fixed and do not depend on seed.
-    if split_test == "F22":
+    if split_test == "F22" or code == "Uncertainty":
         df  = df_full[df_full["Semester"] != "F2022"]
         F22 = df_full[df_full["Semester"] == "F2022"]
     else:
@@ -654,9 +654,8 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
     print("N_pos_test " + str(N_pos_test))
     print("N_neg_test " + str(N_neg_test))
     print("N_pos_train " + str(N_pos_train))
-    print("N_neg_train " + str(N_neg_train))
-                
-    if split_test == "pre" or split_test == "postpre":
+    print("N_neg_train " + str(N_neg_train))        
+    if split_test == "pre" or split_test == "postpre" or split_test == "post":
         #create the data structures
         X_pre_pos = []
         X_pre_neg = []
@@ -707,7 +706,8 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
         print("length X_post_neg " + str(len(X_post_neg)))
         
         #create training and test sets
-        percent_pre = 0.2
+        percent_pre = 0.2 #for population systematics section
+        percent_pre = 0.5 #for uncertainty test
         
         N_pos_train_pre = math.ceil(N_pos_train*percent_pre)
         N_pos_train_post = math.floor(N_pos_train*(1-percent_pre))
@@ -736,7 +736,12 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
                 return pd.DataFrame()
             full_test_X = X_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test_pre] + X_pre_neg[N_neg_train_pre: N_neg_train_pre + N_neg_test_pre] +  X_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test_post] + X_post_neg[N_neg_train_post:N_neg_train_post  + N_neg_test_post]
             full_test_y = np.concatenate((y_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test_pre], y_pre_neg[N_neg_train_pre: N_neg_train_pre + N_neg_test_pre], y_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test_post], y_post_neg[N_neg_train_post: N_neg_train_post + N_neg_test_post]))
-    
+        elif split_test == "post":
+            if len(X_post_pos) < N_pos_train_post + N_pos_test or len(X_post_neg) < N_neg_train_post + N_neg_test:
+                return pd.DataFrame()
+            full_test_X = X_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test] + X_post_neg[N_neg_train_post:N_neg_train_post + N_neg_test]
+            full_test_y = np.concatenate((y_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test], y_post_neg[N_neg_train_post:N_neg_train_post + N_neg_test]))
+
     elif split_test == "all" or split_test == "F22":
     #if not testing population systematics
         X_pos = []
