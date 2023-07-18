@@ -162,7 +162,7 @@ def logreg(s,tokenizer, Xtrain, Xtest, Train_y, Test_y):
     return confusion_matrix(Test_y, predictions_Log)
 def get_predicts_binary(s, train_x,train_y, test_x):
     """
-    Run the logistic regression for many trials, store and return all relevant data (e.g. computer est, human est, rate of false negatives and rate of false positives)
+    Apply a trained model to a dataset and return the machine coded dataset
     
     For binary classification tasks. 
     
@@ -213,8 +213,8 @@ def get_predicts_binary(s, train_x,train_y, test_x):
     for num in sorted_keys[-20:]:
         words.append(words_dict[num])
         coefs.append(coefs_dict[num])
-    print(words)
-    print(coefs)
+    #print(words)
+    #print(coefs)
     return predictions_Log
     
     
@@ -454,23 +454,35 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, test_inst
     if len(X_pos_train) <  N_pos_train or len(X_neg_train) <  N_neg_train:
         return pd.DataFrame()
     
+    #make a holdout test set (X_hold, y_hold) and a systematics plot test set (X, y)
+    
     X_pos = []
     X_neg = []
     y_pos = []
     y_neg = []
     
+    holdout_num_Cornell = 55
+    holdout_num_UTAustin = 293
+    holdout_num_NCState = 126
+    
     if test_institution == "Cornell":
-        df = df_CU
-        X = X_CU
-        y = y_CU
+        #df = df_CU
+        X = X_CU[holdout_num_Cornell:]
+        y = y_CU[holdout_num_Cornell:]
+        X_hold = X_CU[:holdout_num_Cornell]
+        y_hold = y_CU[:holdout_num_Cornell]
     if test_institution == "UTAustin":
-        df = df_UT
-        X = X_UT
-        y = y_UT
+        #df = df_UT
+        X = X_UT[holdout_num_UTAustin:]
+        y = y_UT[holdout_num_UTAustin:]
+        X_hold = X_CU[:holdout_num_UTAustin]
+        y_hold = y_CU[:holdout_num_UTAustin]
     if test_institution == "NCState":
-        df = df_NCS
-        X = X_NCS
-        y = y_NCS
+        #df = df_NCS
+        X = X_NCS[holdout_num_NCState:]
+        y = y_NCS[holdout_num_NCState:]
+        X_hold = X_CU[:holdout_num_NCState]
+        y_hold = y_CU[:holdout_num_NCState]
 
     
     for idx, condition_met in enumerate(y == val):
@@ -516,6 +528,14 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, test_inst
         return pd.DataFrame()
     if sum(1 for i in Train_y if i == val)<2:
         warnings.warn("Less than 2 examples of code in Training set")
+    
+    #Get the machine coding of the remaining data
+    machine_coding = pd.DataFrame({"responses": X_hold,
+        "labels": get_predicts_binary(s, Train_X, Train_y, X_hold)})
+    machine_coding.to_csv(test_institution + '_coded.csv')
+    human_coding = pd.DataFrame({"responses": X_hold,
+        "labels": y_hold})
+    human_coding.to_csv(test_institution + '_human_coded.csv')
     
     test_bank.tests_on_inputs(df_s, Train_X, Train_y, full_test_X, full_test_y, val)
     #might be able to not output the human dfs because of the tests, write down where that info can be gathered elsewhere

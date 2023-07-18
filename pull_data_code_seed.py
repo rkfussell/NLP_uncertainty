@@ -12,7 +12,7 @@ print(os.getcwd())
 import get_systematics_data as gsd
 
 
-def get_data_train_test(train_dec,test_dec, s, code, val, n_full, n, train_size, split_test, opt_trustworthy, num_samples):
+def get_data_train_test(train_dec, test_dec, code, val, s, n_full, n, train_size, test_institution, num_samples = 100):
     """
     Driver to run data collection processes in get_systematics_data.py
 
@@ -45,7 +45,7 @@ def get_data_train_test(train_dec,test_dec, s, code, val, n_full, n, train_size,
         Dataframe of all data from current collection, can be concatenated with other df with other parameters
 
     """
-    df = gsd.get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_test, opt_trustworthy, num_samples)
+    df = gsd.get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, test_institution, num_samples = 100)
     df["train_size"] = train_size
     df["train_prop"] = train_dec
     df["test_prop"] = test_dec
@@ -53,7 +53,7 @@ def get_data_train_test(train_dec,test_dec, s, code, val, n_full, n, train_size,
     df["n"] = n
     return df
 
-def get_data_code_seed(code, val, s, filename, train_sizes = [600], train_decs = [0.2,0.3,0.4,0.5,0.6,0.7,0.8], test_decs = [0.2,0.3,0.4,0.5,0.6,0.7,0.8], n_fulls = [200], ns = [50,100], split_test = "all", opt_trustworthy = True, num_samples = 100):
+def get_data_code_seed(code, val, s, filename, test_institution,  train_sizes = [600], train_decs = [0.2,0.3,0.4,0.5,0.6,0.7,0.8], test_decs = [0.2,0.3,0.4,0.5,0.6,0.7,0.8], n_fulls = [200], ns = [50,100], num_samples = 100):
     """
     Drive get_data_train_test() over a specified range of train_dec and test_dec
     
@@ -93,22 +93,17 @@ def get_data_code_seed(code, val, s, filename, train_sizes = [600], train_decs =
 
     """
     df = pd.DataFrame()
-    #for gathering labels on uncoded data
-    if split_test == "F22":
-        df = gsd.get_data(0.5, 0.5, code, val, s, 200, 100, train_sizes[0], split_test, opt_trustworthy, num_samples)
-        df.to_csv("coded_F22_data_" + code + ".csv")
-    else:
-        #for testing on coded test and train
-        for train_size in train_sizes:
-            for train_dec in train_decs:
-                for test_dec in test_decs:
-                    for n_full in n_fulls:
-                        for n in ns:
-                            if n < n_full:
-                                df_new = get_data_train_test(train_dec, test_dec, s, code, val, n_full, n, train_size, split_test, opt_trustworthy, num_samples)
-                                if not df_new.empty:
-                                    df = pd.concat([df, df_new])
-        #df.to_csv("male_vs_gender-min_" + split_test + "_code" + code + "val" + str(val) + "seed" + str(s) + "_df.csv")
-        df.to_csv(filename + split_test + "_code" + code + "val" + str(val) + "seed" + str(s) + "_df.csv")
+    #for testing on coded test and train
+    for train_size in train_sizes:
+        for train_dec in train_decs:
+            for test_dec in test_decs:
+                for n_full in n_fulls:
+                    for n in ns:
+                        if n < n_full:
+                            df_new = get_data_train_test(train_dec, test_dec, code, val, s, n_full, n, train_size, test_institution)
+                            if not df_new.empty:
+                                df = pd.concat([df, df_new])
+    #df.to_csv("male_vs_gender-min_" + split_test + "_code" + code + "val" + str(val) + "seed" + str(s) + "_df.csv")
+    df.to_csv(filename + test_institution + "_code" + code + "val" + str(val) + "seed" + str(s) + "_df.csv")
     return df
 
