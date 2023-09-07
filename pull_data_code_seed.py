@@ -38,6 +38,8 @@ def get_data_train_test(train_dec,test_dec, s, code, val, n_full, n, train_size,
         denotes if data are split based on metadata to test population systematics
     opt_trustworthy : bool
         True if working with Trustworthy data only
+    num_samples: int
+        number of times a sample of size n will be pulled from the test bank of size n_full
 
     Returns
     -------
@@ -83,6 +85,8 @@ def get_data_code_seed(code, val, s, filename, train_sizes = [600], train_decs =
         denotes if data are split based on metadata to test population systematics
     opt_trustworthy : bool
         True if working with Trustworthy data only
+    num_samples: int
+        number of times a sample of size n will be pulled from the test bank of size n_full
 
     Returns
     -------

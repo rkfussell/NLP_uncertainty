@@ -42,11 +42,9 @@ def tests_on_outputs(est, human_est,FP, FN, df_human, test_dec, train_dec, n_ful
     assert(not FP.isnull().values.any())
     assert(not FN.isnull().values.any())
     
-    #TEST 3: human est out of 200 from df human is close to average of human_est in samples of 100
-    assert(df_human["test_y"][1]/2 - human_est.mean() < 2 or df_human["test_y"][1]/2 - human_est.mean() > 2, df_human["test_y"][1]/2 - human_est.mean())
-    #TEST 4: human est is at right level given test_dec
+    #TEST 3: human est is at right level given test_dec
     assert(100*test_dec - sum(human_est)/len(human_est) <3 or sum(human_est)/len(human_est) - 100*test_dec <3)
-    #TEST 5: est must be less than n
+    #TEST 4: est must be less than n
     assert(est[i]<=n)
     
 def tests_on_data():

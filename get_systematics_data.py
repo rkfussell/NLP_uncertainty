@@ -14,7 +14,7 @@ import math
 import contractions
 import nltk
 
-from sklearn import model_selection, naive_bayes, svm, linear_model, ensemble, neighbors
+from sklearn import linear_model, model_selection
 from sklearn.metrics import confusion_matrix
 from keras.preprocessing.text import Tokenizer
 
@@ -68,7 +68,7 @@ def preprocess_text(line):
     line = [word.strip() for word in line]
     # Remove punctuations and numbers
     line = [re.sub('[^a-zA-Z]', ' ', word) for word in line]
-    # Single character removal
+    # Remove special characters
     line = [re.sub(r"\s+[a-zA-Z]\s+", ' ', word) for word in line]
     # remove remaining tokens that are not alphabetic
     tokens = [word for word in line if word.isalpha()]
@@ -138,17 +138,12 @@ def logreg(s,tokenizer, Xtrain, Xtest, Train_y, Test_y):
     predictions_Log = Log.predict(Xtest)
     words = []
     coefs = []
-    #if s == 100:
-    if False:
-        #Log.coef_[2][i] for principles, Log.coef_[0][i] for limitations
+    if False: #change to True to print words with highest and lowest odds ratios
         coefs_dict = {i: np.exp(Log.coef_[0][i]) for i in range(len(Log.coef_[0]))}
         sorted_keys = sorted(coefs_dict, key=coefs_dict.get) 
         words_dict = dict((v,k) for k,v in tokenizer.word_index.items())
-        #for w in sorted_keys:
-        #    sorted_dict[w] = coefs_dict[w]
-        #print(sorted_dict)
         #print("\nNegative:")
-        for num in sorted_keys[:20]:
+        for num in sorted_keys[:30]:
             words.append(words_dict[num])
             coefs.append(coefs_dict[num])
         #print("\nPositive:")
@@ -183,10 +178,9 @@ def get_predicts_binary(s, train_x,train_y, test_x):
         the model's classification of the new data set
 
     """
+    #use tokenizer to create vocabulary and fit to model inputs
     tok = Tokenizer(lower = False)
-    #tok.fit_on_texts(Train_X)
     tok.fit_on_texts(train_x)
-    #Tr_X = tok.texts_to_matrix(Train_X, mode="binary")
     Tr_X = tok.texts_to_matrix(train_x, mode="binary")
     Te_X = tok.texts_to_matrix(test_x, mode="binary")
     #run the logistic regression
@@ -198,13 +192,9 @@ def get_predicts_binary(s, train_x,train_y, test_x):
     
     words = []
     coefs = []
-    #Log.coef_[2][i] for principles, Log.coef_[0][i] for limitations
     coefs_dict = {i: np.exp(Log.coef_[0][i]) for i in range(len(Log.coef_[0]))}
     sorted_keys = sorted(coefs_dict, key=coefs_dict.get) 
     words_dict = dict((v,k) for k,v in tok.word_index.items())
-    #for w in sorted_keys:
-    #    sorted_dict[w] = coefs_dict[w]
-    #print(sorted_dict)
     #print("\nNegative:")
     for num in sorted_keys[:10]:
         words.append(words_dict[num])
@@ -236,6 +226,8 @@ def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, n, num_samples)
         X (encoded responses) of test set, random samples of 100 pulled from here in all trials
     n : int
         for each test, a sample of size n is pulled from the full test set
+    num_samples: int
+        number of times a sample of size n will be pulled from the test bank of size n_full
 
     Returns
     -------
@@ -250,29 +242,13 @@ def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, n, num_samples)
     fn = []
     human_est = []
     kappa = []
-    #pull 100 samples from the full test set
+    #pull samples from the full test set
     for s in range(num_samples):
         set_random_seed(seed = s)
         tok = Tokenizer(lower = False)
-        #tok.fit_on_texts(Train_X)
         tok.fit_on_texts(train_x)
-        #Tr_X = tok.texts_to_matrix(Train_X, mode="binary")
         Tr_X = tok.texts_to_matrix(train_x, mode="binary")
-        #make test set, must have at least 2 examples of the code
-        enough_pos_in_test = False
-        i = 0
-        if False:
-            while not enough_pos_in_test:
-                set_random_seed(seed = s + i*100)
-                _, Te_X, _, Te_y = model_selection.train_test_split(test_x,test_y,test_size=n)
-                if sum(Te_y)/len(Te_y) == 0.0 or sum(Te_y)/len(Te_y) == 1.0:
-                    i +=1
-                    #print(i)
-                else:
-                    enough_pos_in_test = True
-                if i > 11:
-                    print(i)
-                    return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        #make test set
         _, Te_X, _, Te_y = model_selection.train_test_split(test_x,test_y,test_size=n)
 
         Te_X = tok.texts_to_matrix(Te_X, mode="binary")
@@ -352,9 +328,7 @@ def get_stats_est_fp_fn_3code(train_x, train_y, test_x, test_y, val, n):
     for s in range(100):
         set_random_seed(seed = s)
         tok = Tokenizer(lower = False)
-        #tok.fit_on_texts(Train_X)
         tok.fit_on_texts(train_x)
-        #Tr_X = tok.texts_to_matrix(Train_X, mode="binary")
         Tr_X = tok.texts_to_matrix(train_x, mode="binary")
         #make test set, must have at least 2 examples of the code
         enough_pos_in_test = False
@@ -415,6 +389,8 @@ def trustworthy_process( s, code, split_test):
         s is an integer specifying random seed.
     code : string
         the category of response in human coded data.
+    split_test : string
+        denotes if data are split based on metadata to test population systematics
 
     Returns
     -------
@@ -465,17 +441,14 @@ def trustworthy_process( s, code, split_test):
         X_POST.append(preprocess_text(response))
     y_POST = np.array(POST[code].tolist())
     X_F22 = []
-#    if split_test == "F22":
-#        for response in F22["Trustworthy Response"].tolist():
-#            X_F22.append((preprocess_text(response), F22["ResponseID"])) 
-#        return (PRE, POST), N_each, (X_PRE, X_POST), (y_PRE, y_POST), X_F22
+
     if split_test == "F22":
         for index, row in F22.iterrows():
             X_F22.append((preprocess_text(row["Trustworthy Response"]), row["ResponseID"]))
         return (PRE, POST), N_each, (X_PRE, X_POST), (y_PRE, y_POST), X_F22
     return (PRE, POST), N_each, (X_PRE, X_POST), (y_PRE, y_POST)
 
-def sources_process( s, code, val , systematic = "all"):
+def sources_process(s, code, val , systematic = "all"):
     """
     Pre-process sources of uncertainty data, break into groups of systematic variable.
     
@@ -513,10 +486,6 @@ def sources_process( s, code, val , systematic = "all"):
     elif systematic == "intro":
         df = df[df["intro/upper"]== "intro"]
         
-    if systematic == "male":
-        df = df[df["Gender"]== "Male"]
-    elif systematic == "gender-min":
-        df = pd.concat([df[df["Gender"]== "Female"], df[df["Gender"]== "Non-binary"]])
         
     #Split by experiment, then shuffle all the rows randomly but deterministically
     PM = df[df["Exp"] =="PM"]
@@ -528,16 +497,7 @@ def sources_process( s, code, val , systematic = "all"):
     BMs = BM.sample(frac=1).reset_index(drop=True)
     SGs = SG.sample(frac=1).reset_index(drop=True)
     SSs = SS.sample(frac=1).reset_index(drop=True)
-    """
-    #Pull out only the first 239 from each experiment (because min response number 239 for SS)
-    PMs = PMs.iloc[:239]
-    BMs = BMs.iloc[:239]
-    SGs = SGs.iloc[:239]
-    SSs = SSs.iloc[:239]
-    #Keep the 468-239 additional PM responses because those will be useful
-    PM_add = PMs.iloc[239:]
-    BM_add = BMs.iloc[239:]
-    """
+
 
     N_each = len(PMs)
     if systematic == "all":
@@ -614,6 +574,8 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
         denotes if data are split based on metadata to test population systematics
     opt_trustworthy : bool
         True if working with Trustworthy data only
+    num_samples: int
+        number of times a sample of size n will be pulled from the test bank of size n_full
 
     Returns
     -------
@@ -626,20 +588,14 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
 
     if opt_trustworthy and split_test == "F22":
         df_s, N_each, X_s, y_s, X_F22 =  trustworthy_process(s, code, split_test)
-        #train_size = 600
     elif opt_trustworthy:
         df_s, N_each, X_s, y_s =  trustworthy_process(s, code, split_test)
-        #train_size = 600
     elif split_test == "upper" or split_test == "intro":
         df_s, N_PM, X_s, y_s = sources_process(s, code, val, systematic = "intro")
         df_s_sys, N_PM_sys, X_s_sys, y_s_sys = sources_process(s, code, val, systematic = "upper")
         #train_size = 550
         print(N_PM)
         print(N_PM_sys)
-    elif split_test == "male" or split_test == "gender-min":
-        df_s, N_each, X_s, y_s = sources_process(s, code, val, systematic = "male")
-        df_s_sys, N_each, X_s_sys, y_s_sys = sources_process(s, code, val, systematic = "gender-min")
-        #train_size = 600
     else:
         df_s, N_each, X_s, y_s = sources_process(s, code, val, systematic = split_test)
         #train_size = 600
@@ -706,8 +662,8 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
         print("length X_post_neg " + str(len(X_post_neg)))
         
         #create training and test sets
-        percent_pre = 0.2 #for population systematics section
-        percent_pre = 0.5 #for uncertainty test
+        percent_pre = 0.2 #for uncertainty in new data sets section
+        percent_pre = 0.5 #for fully worked example with uncertainty
         
         N_pos_train_pre = math.ceil(N_pos_train*percent_pre)
         N_pos_train_post = math.floor(N_pos_train*(1-percent_pre))
@@ -783,7 +739,7 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
             for row in X_F22:
                 full_test_X.append(row[0])
                 corresponding_responseID.append(row[1])
-            responseID = X_F22
+
             codes = get_predicts_binary(s, Train_X, Train_y, full_test_X)
             #"Response": full_test_X
             return pd.DataFrame({"Response": full_test_X , code: codes, "ResponseID": corresponding_responseID})
@@ -814,42 +770,4 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
     test_bank.tests_on_outputs(df["est"], df["human_est"],df["fp"], df["fn"], df_human, test_dec, train_dec, n_full, n)
     print(df_human)
     return df
-
-
-"""
-    else:
-            
-            percent_pre = 0.5
-            
-            N_pos_train_pre = math.ceil(N_pos_train*percent_pre)
-            N_pos_train_post = math.floor(N_pos_train*(1-percent_pre))
-            N_neg_train_pre = math.ceil(N_neg_train*percent_pre)
-            N_neg_train_post = math.floor(N_neg_train*(1-percent_pre))
-            
-            N_pos_test_pre = math.floor(N_pos_test*percent_pre)
-            N_pos_test_post = math.ceil(N_pos_test*(1-percent_pre))
-            N_neg_test_pre = math.floor(N_neg_test*percent_pre)
-            N_neg_test_post = math.ceil(N_neg_test*(1-percent_pre))
-            
-            if len(X_pre_pos) < N_pos_train_pre + N_pos_test_pre or len(X_post_pos) < N_pos_train_post + N_pos_test_post  or len(X_pre_neg)  < N_neg_train_pre + N_neg_test_pre or len(X_post_neg) < N_neg_train_post + N_neg_test_post:
-                return pd.DataFrame()
-            
-            #create X and y for fixed training set
-            Train_X = X_pre_pos[:N_pos_train_pre] + X_pre_neg[:N_neg_train_pre] + X_post_pos[:N_pos_train_post] + X_post_neg[:N_neg_train_post]
-            Train_y = np.concatenate((y_pre_pos[:N_pos_train_pre], y_pre_neg[:N_neg_train_pre], y_post_pos[:N_pos_train_post], y_post_neg[:N_neg_train_post]))
-            
-            if split_test == "F22":
-                full_test_X = X_F22
-                codes = get_predicts_binary(s, Train_X, Train_y, full_test_X)
-                #"Response": full_test_X
-                return pd.DataFrame({"Response": full_test_X ,"Uncertainty": codes})
-            elif split_test == "post":
-                if len(X_post_pos) < N_pos_train_post + N_pos_test or len(X_post_neg) < N_neg_train_post + N_neg_test:
-                    return pd.DataFrame()
-                full_test_X = X_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test] + X_post_neg[N_neg_train_post:N_neg_train_post + N_neg_test]
-                full_test_y = np.concatenate((y_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test], y_post_neg[N_neg_train_post:N_neg_train_post + N_neg_test]))
-            else:
-                full_test_X = X_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test_pre] + X_pre_neg[N_neg_train_pre: N_neg_train_pre + N_neg_test_pre] +  X_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test_post] + X_post_neg[N_neg_train_post:N_neg_train_post  + N_neg_test_post]
-                full_test_y = np.concatenate((y_pre_pos[N_pos_train_pre:N_pos_train_pre + N_pos_test_pre], y_pre_neg[N_neg_train_pre: N_neg_train_pre + N_neg_test_pre], y_post_pos[N_pos_train_post:N_pos_train_post + N_pos_test_post], y_post_neg[N_neg_train_post: N_neg_train_post + N_neg_test_post]))
-            
- """   
+ 
