@@ -227,7 +227,7 @@ def get_stats_est_fp_fn_binary(train_x, train_y, test_x, test_y, n, num_samples)
     n : int
         for each test, a sample of size n is pulled from the full test set
     num_samples: int
-        number of times a sample of size n will be pulled from the test bank of size n_full
+        number of times a sample of size n will be pulled from the test bank of size N_bank
 
     Returns
     -------
@@ -547,16 +547,16 @@ def sources_process(s, code, val , systematic = "all"):
     elif systematic == "upper" or systematic == "intro":
         return (PMs,), N_each, (X_PMs,), (y_PMs,)
 
-def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_test = "all", opt_trustworthy = False, num_samples = 100):
+def get_data(p_train, p_test, code, val, s, N_bank, n, train_size, split_test = "all", opt_trustworthy = False, num_samples = 100):
     """
     code is a string, the category of response in human coded data
     N_each is the number of responses after cleaning 
 
     Parameters
     ----------
-    train_dec : float
+    p_train : float
         Number between 0 and 1 specifying fraction of responses with the code to put in training set.
-    test_dec : float
+    p_test : float
         Number between 0 and 1 specifying fraction of responses with the code to put in test set.
     code : string
         the category of response in human coded data.
@@ -564,7 +564,7 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
         estimate frequency in dataset of this value of code (e.g. "L" or 1 for binary data (trustworthy))
     s : integer
         s is an integer specifying random seed.
-    n_full: int
+    N_bank: int
         number of responses in the full test set 
     n : int
         for each test, a sample of size n is pulled from the full test set
@@ -575,7 +575,7 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
     opt_trustworthy : bool
         True if working with Trustworthy data only
     num_samples: int
-        number of times a sample of size n will be pulled from the test bank of size n_full
+        number of times a sample of size n will be pulled from the test bank of size N_bank
 
     Returns
     -------
@@ -601,9 +601,9 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
         #train_size = 600
     
     #number of pos and neg in test and training sets
-    N_pos_test = math.floor(n_full*test_dec)
-    N_neg_test = n_full - N_pos_test
-    N_pos_train = math.floor(train_size*train_dec)
+    N_pos_test = math.floor(N_bank*p_test)
+    N_neg_test = N_bank - N_pos_test
+    N_pos_train = math.floor(train_size*p_train)
     N_neg_train = train_size - N_pos_train
     
     print("\n")
@@ -767,7 +767,7 @@ def get_data(train_dec, test_dec, code, val, s, n_full, n, train_size, split_tes
     
     test_bank.tests_on_inputs(df_s, Train_X, Train_y, full_test_X, full_test_y, val, opt_trustworthy )
     #might be able to not output the human dfs because of the tests, write down where that info can be gathered elsewhere
-    test_bank.tests_on_outputs(df["est"], df["human_est"],df["fp"], df["fn"], df_human, test_dec, train_dec, n_full, n)
+    test_bank.tests_on_outputs(df["est"], df["human_est"],df["fp"], df["fn"], df_human, p_test, p_train, N_bank, n)
     print(df_human)
     return df
  

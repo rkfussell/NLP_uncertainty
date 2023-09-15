@@ -29,7 +29,7 @@ def tests_on_inputs(df_s, Train_X, Train_y, full_test_X, full_test_y, val, opt_t
         assert(len(X_merge.index) == 0)
 
     
-def tests_on_outputs(est, human_est,FP, FN, df_human, test_dec, train_dec, n_full, n):
+def tests_on_outputs(est, human_est,FP, FN, df_human, test_dec, p_train, N_bank, n):
     #TEST 1: Assert Human estimate = TP + FN; est is within shooting distance of human est. 
     for i, row in est.iteritems():
         assert(human_est[i] == FN[i] + est[i] - FP[i])
